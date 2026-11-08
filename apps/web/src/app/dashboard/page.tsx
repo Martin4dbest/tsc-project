@@ -18,6 +18,7 @@ const services = [
     title: "My Journeys",
     description: "Plan trips, activate travel safety and view your journey history.",
     category: "JOURNEY MANAGEMENT",
+    href: "/dashboard/journeys",
   },
   {
     number: "02",
@@ -32,6 +33,7 @@ const services = [
     title: "Emergency Support",
     description: "Get access to emergency assistance and response services.",
     category: "EMERGENCY SERVICES",
+    href: "/dashboard/emergency",
   },
   {
     number: "04",
@@ -169,7 +171,7 @@ export default async function TravellerDashboard() {
                 <p>{service.description}</p>
 
                 <div className="traveller-service-bottom">
-                  <span className="traveller-service-status">Coming soon</span>
+                  {service.href ? <a className="traveller-service-status" href={service.href}>Open service</a> : <span className="traveller-service-status">Coming soon</span>}
                   <span className="traveller-service-arrow">→</span>
                 </div>
               </article>
