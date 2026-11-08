@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Travelers Safety Covered",
+    "slug": "tsc",
+    "scheme": "tsc",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.core1enterprisesolutions.tsc"
+    },
+    "android": {
+      "package": "com.core1enterprisesolutions.tsc",
+      "adaptiveIcon": {
+        "backgroundColor": "#071D49",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#071D49"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow TSC to share your location during an active journey when you choose to enable GPS tracking."
+        }
+      ]
+    ]
+  }
+}
