@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
-import JourneyWebGpsControls from "./JourneyWebGpsControls";
+import JourneyTravellerGpsPanel from "./JourneyTravellerGpsPanel";
 
 type JourneyStatus = "draft" | "scheduled" | "active" | "completed" | "cancelled";
 
@@ -627,7 +627,6 @@ export default function JourneyManagementClient({
                     </>
                   )}
                 </div>
-
               </article>
             ))}
           </div>
@@ -748,7 +747,7 @@ export default function JourneyManagementClient({
               )}
 
               {detailsJourney.status === "active" && (
-                <JourneyWebGpsControls
+                <JourneyTravellerGpsPanel
                   journey={detailsJourney}
                   onUpdated={(enabled, consentAt) => {
                     setDetailsJourney((current) =>

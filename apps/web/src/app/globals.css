@@ -9369,3 +9369,28 @@ a {
     flex-direction: column;
   }
 }
+
+.tsc-traveller-gps-map {
+  margin-top: 16px;
+  min-width: 0;
+}
+
+.tsc-traveller-gps-map .live-gps-map-canvas {
+  width: 100%;
+  min-height: 340px;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.tsc-traveller-gps-map .live-gps-leaflet-map {
+  width: 100%;
+  height: 340px;
+}
+
+@media (max-width: 640px) {
+  .tsc-traveller-gps-map .live-gps-map-canvas,
+  .tsc-traveller-gps-map .live-gps-leaflet-map {
+    min-height: 280px;
+    height: 280px;
+  }
+}
