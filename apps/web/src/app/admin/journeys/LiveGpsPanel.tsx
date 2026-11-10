@@ -48,9 +48,11 @@ export default function LiveGpsPanel({ records, error }: Props) {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Keep every consented, active journey visible, including those
+  // that are still waiting for their first browser GPS update.
   const selectedJourney =
-    journeysWithLocations.find((journey) => journey.id === selectedId) ??
-    journeysWithLocations[0] ??
+    records.find((journey) => journey.id === selectedId) ??
+    records[0] ??
     null;
 
   const latest = selectedJourney
@@ -71,15 +73,15 @@ export default function LiveGpsPanel({ records, error }: Props) {
           </span>
           <h2>Live traveller map</h2>
           <p>
-            View recorded traveller positions and movement history for active
-            journeys with location-sharing consent.
+            View active journeys with location-sharing consent, including
+            travellers whose first GPS update is still pending.
           </p>
         </div>
 
         <div className="live-gps-summary">
           <span>
-            <strong>{journeysWithLocations.length}</strong>
-            Journeys with GPS records
+            <strong>{records.length}</strong>
+            Journeys sharing location
           </span>
           <span>
             <strong>{recentCount}</strong>
@@ -93,15 +95,14 @@ export default function LiveGpsPanel({ records, error }: Props) {
           <strong>GPS monitoring unavailable</strong>
           <p>{error}</p>
         </div>
-      ) : journeysWithLocations.length === 0 ? (
+      ) : records.length === 0 ? (
         <div className="live-gps-empty">
           <span className="live-gps-empty-icon">⌖</span>
           <div>
-            <strong>No recorded GPS positions available</strong>
+            <strong>No active location-sharing journeys</strong>
             <p>
-              The map will display a traveller after an active journey has
-              location-sharing consent and at least one GPS position has been
-              recorded.
+              Active journeys will appear here after travellers enable
+              location sharing and record their consent.
             </p>
           </div>
         </div>
@@ -111,36 +112,50 @@ export default function LiveGpsPanel({ records, error }: Props) {
             <div className="live-gps-map-toolbar">
               <div>
                 <span className="live-gps-map-dot" />
-                <strong>Recorded GPS positions</strong>
+                <strong>
+                  {latest ? "Recorded GPS positions" : "GPS position pending"}
+                </strong>
               </div>
               <span>
                 {selectedJourney?.locations.length ?? 0} route points
               </span>
             </div>
 
-            {selectedJourney && (
+            {selectedJourney && latest ? (
               <LiveGpsMap journey={selectedJourney} />
+            ) : (
+              <div className="live-gps-empty">
+                <span className="live-gps-empty-icon">⌖</span>
+                <div>
+                  <strong>Waiting for first GPS update</strong>
+                  <p>
+                    This traveller has enabled location sharing. Their
+                    position will appear here when the first GPS update
+                    reaches TSC.
+                  </p>
+                </div>
+              </div>
             )}
 
-            <div className="live-gps-map-legend">
-              <span><i className="gps-legend-current" /> Latest position</span>
-              <span><i className="gps-legend-route" /> Recorded route</span>
-              <span><i className="gps-legend-old" /> Earlier position</span>
-            </div>
+            {latest && (
+              <div className="live-gps-map-legend">
+                <span><i className="gps-legend-current" /> Latest position</span>
+                <span><i className="gps-legend-route" /> Recorded route</span>
+                <span><i className="gps-legend-old" /> Earlier position</span>
+              </div>
+            )}
           </div>
 
           <aside className="live-gps-traveller-panel">
             <div className="live-gps-traveller-heading">
               <strong>Tracking list</strong>
-              <span>{journeysWithLocations.length} travellers</span>
+              <span>{records.length} travellers</span>
             </div>
 
             <div className="live-gps-traveller-list">
-              {journeysWithLocations.map((journey) => {
+              {records.map((journey) => {
                 const point = getLatestLocation(journey);
-                if (!point) return null;
-
-                const stale = isStale(point.recorded_at);
+                const stale = point ? isStale(point.recorded_at) : false;
                 const selected = selectedJourney?.id === journey.id;
 
                 return (
@@ -168,14 +183,17 @@ export default function LiveGpsPanel({ records, error }: Props) {
                       </small>
                       <span
                         className={
-                          stale
+                          !point || stale
                             ? "live-gps-freshness stale"
                             : "live-gps-freshness"
                         }
                       >
                         <i />
-                        {stale ? "Stale position" : "Recently updated"} ·{" "}
-                        {timeAgo(point.recorded_at)}
+                        {!point
+                          ? "Waiting for first GPS update"
+                          : stale
+                            ? `Stale position · ${timeAgo(point.recorded_at)}`
+                            : `Recently updated · ${timeAgo(point.recorded_at)}`}
                       </span>
                     </span>
                     <span className="live-gps-select-arrow">›</span>
@@ -184,7 +202,7 @@ export default function LiveGpsPanel({ records, error }: Props) {
               })}
             </div>
 
-            {selectedJourney && latest && (
+            {selectedJourney && (
               <div className="live-gps-selected-details">
                 <span className="journey-section-kicker">
                   SELECTED TRAVELLER
@@ -193,35 +211,56 @@ export default function LiveGpsPanel({ records, error }: Props) {
                 <p>
                   {selectedJourney.traveller_phone || "No contact number"}
                 </p>
+
                 <div>
-                  <span>Last recorded</span>
-                  <strong>{timeAgo(latest.recorded_at)}</strong>
+                  <span>Location sharing</span>
+                  <strong>Enabled with consent</strong>
                 </div>
+
                 <div>
-                  <span>GPS accuracy</span>
+                  <span>GPS status</span>
                   <strong>
-                    {latest.accuracy_meters == null
-                      ? "Not available"
-                      : `±${Math.round(latest.accuracy_meters)} m`}
+                    {!latest
+                      ? "Waiting for first update"
+                      : isStale(latest.recorded_at)
+                        ? "Last position is stale"
+                        : "Recently updated"}
                   </strong>
                 </div>
-                <div>
-                  <span>Speed</span>
-                  <strong>
-                    {latest.speed_meters_per_second == null
-                      ? "Not available"
-                      : `${(
-                          latest.speed_meters_per_second * 3.6
-                        ).toFixed(1)} km/h`}
-                  </strong>
-                </div>
-                <div>
-                  <span>Coordinates</span>
-                  <strong>
-                    {latest.latitude.toFixed(5)},{" "}
-                    {latest.longitude.toFixed(5)}
-                  </strong>
-                </div>
+
+                {latest && (
+                  <>
+                    <div>
+                      <span>Last recorded</span>
+                      <strong>{timeAgo(latest.recorded_at)}</strong>
+                    </div>
+                    <div>
+                      <span>GPS accuracy</span>
+                      <strong>
+                        {latest.accuracy_meters == null
+                          ? "Not available"
+                          : `±${Math.round(latest.accuracy_meters)} m`}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Speed</span>
+                      <strong>
+                        {latest.speed_meters_per_second == null
+                          ? "Not available"
+                          : `${(
+                              latest.speed_meters_per_second * 3.6
+                            ).toFixed(1)} km/h`}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Coordinates</span>
+                      <strong>
+                        {latest.latitude.toFixed(5)},{" "}
+                        {latest.longitude.toFixed(5)}
+                      </strong>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </aside>

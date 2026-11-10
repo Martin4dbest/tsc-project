@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import JourneyWebGpsControls from "./JourneyWebGpsControls";
 
 type JourneyStatus = "draft" | "scheduled" | "active" | "completed" | "cancelled";
 
@@ -346,6 +347,12 @@ export default function JourneyManagementClient({
                       <button className="tsc-button tsc-button-danger" disabled={saving} onClick={() => void changeStatus(journey, "cancelled")}>Cancel</button>
                     </>}
                   </div>
+                  {journey.status === "active" && (
+                    <JourneyWebGpsControls
+                      journey={journey}
+                      onUpdated={() => void loadJourneys()}
+                    />
+                  )}
                 </article>
               ))}
             </div>
