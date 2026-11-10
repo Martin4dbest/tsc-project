@@ -23,8 +23,11 @@ type Journey = {
   status: JourneyStatus;
   notes: string | null;
   location_sharing_enabled: boolean;
+  location_sharing_consent_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 type JourneyForm = {
@@ -59,6 +62,14 @@ const statusLabels: Record<JourneyStatus, string> = {
   cancelled: "Cancelled",
 };
 
+const transportLabels: Record<string, string> = {
+  road: "Road",
+  air: "Air",
+  rail: "Rail",
+  sea: "Sea",
+  other: "Other",
+};
+
 function localDateTime(value: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -66,12 +77,24 @@ function localDateTime(value: string | null) {
   return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
 }
 
-function displayDate(value: string | null) {
+function displayDate(value: string | null, timezone?: string | null) {
   if (!value) return "Not specified";
-  return new Date(value).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not available";
+
+  try {
+    return date.toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      ...(timezone ? { timeZone: timezone } : {}),
+    });
+  } catch {
+    return date.toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }
 }
 
 function statusClass(status: JourneyStatus) {
@@ -95,18 +118,24 @@ export default function JourneyManagementClient({
   const [form, setForm] = useState<JourneyForm>(blankForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [detailsJourney, setDetailsJourney] = useState<Journey | null>(null);
 
   const loadJourneys = useCallback(async () => {
     setLoading(true);
     setError("");
+
     const { data, error: queryError } = await supabase
       .from("journeys")
       .select("*")
       .eq("traveller_id", travellerId)
       .order("departure_at", { ascending: true });
 
-    if (queryError) setError("Your journeys could not be loaded. Please refresh and try again.");
-    else setJourneys((data ?? []) as Journey[]);
+    if (queryError) {
+      setError("Your journeys could not be loaded. Please refresh and try again.");
+    } else {
+      setJourneys((data ?? []) as Journey[]);
+    }
+
     setLoading(false);
   }, [supabase, travellerId]);
 
@@ -167,8 +196,12 @@ export default function JourneyManagementClient({
     setError("");
     setNotice("");
 
-    if (!form.journey_name.trim() || !form.origin_name.trim() ||
-        !form.destination_name.trim() || !form.departure_at) {
+    if (
+      !form.journey_name.trim() ||
+      !form.origin_name.trim() ||
+      !form.destination_name.trim() ||
+      !form.departure_at
+    ) {
       setError("Complete the journey name, origin, destination and departure date/time.");
       return;
     }
@@ -180,6 +213,7 @@ export default function JourneyManagementClient({
       setError("Departure must be a valid date and time in the future.");
       return;
     }
+
     if (arrival && (Number.isNaN(arrival.getTime()) || arrival <= departure)) {
       setError("Expected arrival must be later than departure.");
       return;
@@ -187,6 +221,7 @@ export default function JourneyManagementClient({
 
     setSaving(true);
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
     const payload = {
       journey_name: form.journey_name.trim(),
       origin_name: form.origin_name.trim(),
@@ -202,8 +237,11 @@ export default function JourneyManagementClient({
     };
 
     const result = editingId
-      ? await supabase.from("journeys").update(payload)
-          .eq("id", editingId).eq("traveller_id", travellerId)
+      ? await supabase
+          .from("journeys")
+          .update(payload)
+          .eq("id", editingId)
+          .eq("traveller_id", travellerId)
       : await supabase.from("journeys").insert({
           ...payload,
           traveller_id: travellerId,
@@ -212,6 +250,7 @@ export default function JourneyManagementClient({
         });
 
     setSaving(false);
+
     if (result.error) {
       setError(result.error.message || "The journey could not be saved.");
       return;
@@ -220,7 +259,11 @@ export default function JourneyManagementClient({
     setShowForm(false);
     setEditingId(null);
     setForm(blankForm);
-    setNotice(editingId ? "Journey details updated." : "Journey saved as a draft. Schedule it when you are ready.");
+    setNotice(
+      editingId
+        ? "Journey details updated."
+        : "Journey saved as a draft. Schedule it when you are ready."
+    );
     await loadJourneys();
   }
 
@@ -236,11 +279,13 @@ export default function JourneyManagementClient({
 
     setSaving(true);
     setError("");
+
     const { error: updateError } = await supabase
       .from("journeys")
       .update({ status })
       .eq("id", journey.id)
       .eq("traveller_id", travellerId);
+
     setSaving(false);
 
     if (updateError) {
@@ -250,6 +295,14 @@ export default function JourneyManagementClient({
 
     setNotice(`Journey is now ${statusLabels[status].toLowerCase()}.`);
     await loadJourneys();
+
+    if (detailsJourney?.id === journey.id) {
+      setDetailsJourney({ ...detailsJourney, status });
+    }
+  }
+
+  function openJourneyDetails(journey: Journey) {
+    setDetailsJourney(journey);
   }
 
   return (
@@ -258,10 +311,17 @@ export default function JourneyManagementClient({
         <Link href="/dashboard" className="tsc-back-link">← Dashboard</Link>
         <span className="tsc-eyebrow">JOURNEY MANAGEMENT</span>
         <h1>My journeys</h1>
-        <p>Plan your trips, manage your travel schedule and keep your journey information in one place.</p>
+        <p>
+          Plan your trips, manage your travel schedule and keep your journey
+          information in one place.
+        </p>
         <div className="tsc-header-actions">
-          <button className="tsc-button tsc-button-primary" onClick={startNewJourney}>＋ Plan a journey</button>
-          <Link className="tsc-button tsc-button-light" href="/dashboard/emergency">Emergency support</Link>
+          <button className="tsc-button tsc-button-primary" onClick={startNewJourney}>
+            ＋ Plan a journey
+          </button>
+          <Link className="tsc-button tsc-button-light" href="/dashboard/emergency">
+            Emergency support
+          </Link>
         </div>
       </header>
 
@@ -278,25 +338,131 @@ export default function JourneyManagementClient({
       {showForm && (
         <section className="tsc-panel tsc-form-panel">
           <div className="tsc-panel-heading">
-            <div><span className="tsc-eyebrow">JOURNEY DETAILS</span><h2>{editingId ? "Edit journey" : "Plan a new journey"}</h2></div>
-            <button className="tsc-icon-button" onClick={() => setShowForm(false)} aria-label="Close form">×</button>
-          </div>
-          <form onSubmit={saveJourney} className="tsc-form">
-            <label>Journey name<input required maxLength={160} value={form.journey_name} onChange={(e) => updateField("journey_name", e.target.value)} placeholder="e.g. Business trip to Accra" /></label>
-            <div className="tsc-form-grid">
-              <label>Origin<input required maxLength={200} value={form.origin_name} onChange={(e) => updateField("origin_name", e.target.value)} placeholder="City or departure point" /></label>
-              <label>Destination<input required maxLength={200} value={form.destination_name} onChange={(e) => updateField("destination_name", e.target.value)} placeholder="City or arrival point" /></label>
-              <label>Origin address (optional)<input value={form.origin_address} onChange={(e) => updateField("origin_address", e.target.value)} placeholder="Street, terminal or landmark" /></label>
-              <label>Destination address (optional)<input value={form.destination_address} onChange={(e) => updateField("destination_address", e.target.value)} placeholder="Street, terminal or landmark" /></label>
-              <label>Departure date and time<input required type="datetime-local" value={form.departure_at} onChange={(e) => updateField("departure_at", e.target.value)} /></label>
-              <label>Expected arrival (optional)<input type="datetime-local" value={form.expected_arrival_at} onChange={(e) => updateField("expected_arrival_at", e.target.value)} /></label>
-              <label>Transport mode<select value={form.transport_mode} onChange={(e) => updateField("transport_mode", e.target.value)}><option value="road">Road</option><option value="air">Air</option><option value="rail">Rail</option><option value="sea">Sea</option><option value="other">Other</option></select></label>
+            <div>
+              <span className="tsc-eyebrow">JOURNEY DETAILS</span>
+              <h2>{editingId ? "Edit journey" : "Plan a new journey"}</h2>
             </div>
-            <label>Additional notes (optional)<textarea rows={3} value={form.notes} onChange={(e) => updateField("notes", e.target.value)} placeholder="Add useful details about this journey" /></label>
-            <p className="tsc-form-hint">Your journey is initially saved as a private draft. Location sharing is off unless you separately enable it through a supported tracking control.</p>
+            <button
+              className="tsc-icon-button"
+              onClick={() => setShowForm(false)}
+              aria-label="Close form"
+            >
+              ×
+            </button>
+          </div>
+
+          <form onSubmit={saveJourney} className="tsc-form">
+            <label>
+              Journey name
+              <input
+                required
+                maxLength={160}
+                value={form.journey_name}
+                onChange={(e) => updateField("journey_name", e.target.value)}
+                placeholder="e.g. Business trip to Accra"
+              />
+            </label>
+
+            <div className="tsc-form-grid">
+              <label>
+                Origin
+                <input
+                  required
+                  maxLength={200}
+                  value={form.origin_name}
+                  onChange={(e) => updateField("origin_name", e.target.value)}
+                  placeholder="City or departure point"
+                />
+              </label>
+              <label>
+                Destination
+                <input
+                  required
+                  maxLength={200}
+                  value={form.destination_name}
+                  onChange={(e) => updateField("destination_name", e.target.value)}
+                  placeholder="City or arrival point"
+                />
+              </label>
+              <label>
+                Origin address (optional)
+                <input
+                  value={form.origin_address}
+                  onChange={(e) => updateField("origin_address", e.target.value)}
+                  placeholder="Street, terminal or landmark"
+                />
+              </label>
+              <label>
+                Destination address (optional)
+                <input
+                  value={form.destination_address}
+                  onChange={(e) => updateField("destination_address", e.target.value)}
+                  placeholder="Street, terminal or landmark"
+                />
+              </label>
+              <label>
+                Departure date and time
+                <input
+                  required
+                  type="datetime-local"
+                  value={form.departure_at}
+                  onChange={(e) => updateField("departure_at", e.target.value)}
+                />
+              </label>
+              <label>
+                Expected arrival (optional)
+                <input
+                  type="datetime-local"
+                  value={form.expected_arrival_at}
+                  onChange={(e) => updateField("expected_arrival_at", e.target.value)}
+                />
+              </label>
+              <label>
+                Transport mode
+                <select
+                  value={form.transport_mode}
+                  onChange={(e) => updateField("transport_mode", e.target.value)}
+                >
+                  <option value="road">Road</option>
+                  <option value="air">Air</option>
+                  <option value="rail">Rail</option>
+                  <option value="sea">Sea</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+            </div>
+
+            <label>
+              Additional notes (optional)
+              <textarea
+                rows={3}
+                value={form.notes}
+                onChange={(e) => updateField("notes", e.target.value)}
+                placeholder="Add useful details about this journey"
+              />
+            </label>
+
+            <p className="tsc-form-hint">
+              Your journey is initially saved as a private draft. Location
+              sharing is off unless you separately enable it through a
+              supported tracking control.
+            </p>
+
             <div className="tsc-form-actions">
-              <button type="button" className="tsc-button tsc-button-light" onClick={() => setShowForm(false)}>Close</button>
-              <button type="submit" className="tsc-button tsc-button-primary" disabled={saving}>{saving ? "Saving…" : editingId ? "Save changes" : "Save journey"}</button>
+              <button
+                type="button"
+                className="tsc-button tsc-button-light"
+                onClick={() => setShowForm(false)}
+              >
+                Close
+              </button>
+              <button
+                type="submit"
+                className="tsc-button tsc-button-primary"
+                disabled={saving}
+              >
+                {saving ? "Saving…" : editingId ? "Save changes" : "Save journey"}
+              </button>
             </div>
           </form>
         </section>
@@ -304,63 +470,331 @@ export default function JourneyManagementClient({
 
       <section className="tsc-panel">
         <div className="tsc-panel-heading">
-          <div><span className="tsc-eyebrow">YOUR TRAVEL ACTIVITY</span><h2>Journey history</h2></div>
-          <button className="tsc-text-button" onClick={() => void loadJourneys()}>Refresh ↻</button>
+          <div>
+            <span className="tsc-eyebrow">YOUR TRAVEL ACTIVITY</span>
+            <h2>Journey history</h2>
+          </div>
+          <button className="tsc-text-button" onClick={() => void loadJourneys()}>
+            Refresh ↻
+          </button>
         </div>
+
         <div className="tsc-filter-row">
           {["all", "upcoming", "active", "completed", "cancelled"].map((item) => (
-            <button key={item} className={`tsc-filter ${filter === item ? "is-selected" : ""}`} onClick={() => setFilter(item)}>{item[0].toUpperCase() + item.slice(1)}</button>
+            <button
+              key={item}
+              className={`tsc-filter ${filter === item ? "is-selected" : ""}`}
+              onClick={() => setFilter(item)}
+            >
+              {item[0].toUpperCase() + item.slice(1)}
+            </button>
           ))}
         </div>
 
-        {loading ? <div className="tsc-empty-state">Loading your journeys…</div> :
-          visibleJourneys.length === 0 ? (
-            <div className="tsc-empty-state"><span className="tsc-empty-icon">↗</span><h3>No journeys to show</h3><p>{filter === "all" ? "Plan your first journey to begin managing your travel with TSC." : "There are no journeys in this category yet."}</p>{filter === "all" && <button className="tsc-button tsc-button-primary" onClick={startNewJourney}>Plan your first journey</button>}</div>
-          ) : (
-            <div className="tsc-journey-list">
-              {visibleJourneys.map((journey) => (
-                <article className="tsc-journey-card" key={journey.id}>
-                  <div className="tsc-journey-card-heading">
-                    <div><span className="tsc-eyebrow">{journey.transport_mode.toUpperCase()} JOURNEY</span><h3>{journey.journey_name}</h3></div>
-                    <span className={statusClass(journey.status)}>{statusLabels[journey.status]}</span>
+        {loading ? (
+          <div className="tsc-empty-state">Loading your journeys…</div>
+        ) : visibleJourneys.length === 0 ? (
+          <div className="tsc-empty-state">
+            <span className="tsc-empty-icon">↗</span>
+            <h3>No journeys to show</h3>
+            <p>
+              {filter === "all"
+                ? "Plan your first journey to begin managing your travel with TSC."
+                : "There are no journeys in this category yet."}
+            </p>
+            {filter === "all" && (
+              <button className="tsc-button tsc-button-primary" onClick={startNewJourney}>
+                Plan your first journey
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="tsc-journey-list">
+            {visibleJourneys.map((journey) => (
+              <article className="tsc-journey-card" key={journey.id}>
+                <div className="tsc-journey-card-heading">
+                  <div>
+                    <span className="tsc-eyebrow">
+                      {(transportLabels[journey.transport_mode] || journey.transport_mode).toUpperCase()} JOURNEY
+                    </span>
+                    <h3>{journey.journey_name}</h3>
                   </div>
-                  <div className="tsc-route-grid">
-                    <div><span>FROM</span><strong>{journey.origin_name}</strong>{journey.origin_address && <small>{journey.origin_address}</small>}</div>
-                    <div><span>TO</span><strong>{journey.destination_name}</strong>{journey.destination_address && <small>{journey.destination_address}</small>}</div>
+                  <span className={statusClass(journey.status)}>
+                    {statusLabels[journey.status]}
+                  </span>
+                </div>
+
+                <div className="tsc-route-grid">
+                  <div>
+                    <span>FROM</span>
+                    <strong>{journey.origin_name}</strong>
+                    {journey.origin_address && <small>{journey.origin_address}</small>}
                   </div>
-                  <div className="tsc-journey-meta"><span>Departure: {displayDate(journey.departure_at)}</span><span>Arrival: {displayDate(journey.expected_arrival_at)}</span></div>
-                  {journey.notes && <p className="tsc-journey-notes">{journey.notes}</p>}
-                  <div className="tsc-card-actions">
-                    {journey.status === "draft" && <>
-                      <button className="tsc-button tsc-button-light" onClick={() => editJourney(journey)}>Edit</button>
-                      <button className="tsc-button tsc-button-primary" disabled={saving} onClick={() => void changeStatus(journey, "scheduled")}>Schedule journey</button>
-                      <button className="tsc-button tsc-button-danger" disabled={saving} onClick={() => void changeStatus(journey, "cancelled")}>Cancel</button>
-                    </>}
-                    {journey.status === "scheduled" && <>
-                      <button className="tsc-button tsc-button-light" onClick={() => editJourney(journey)}>Edit</button>
-                      <button className="tsc-button tsc-button-primary" disabled={saving} onClick={() => void changeStatus(journey, "active")}>Start journey</button>
-                      <button className="tsc-button tsc-button-danger" disabled={saving} onClick={() => void changeStatus(journey, "cancelled")}>Cancel</button>
-                    </>}
-                    {journey.status === "active" && <>
-                      <span className="tsc-live-note">Journey in progress</span>
-                      <button className="tsc-button tsc-button-primary" disabled={saving} onClick={() => void changeStatus(journey, "completed")}>Complete journey</button>
-                      <button className="tsc-button tsc-button-danger" disabled={saving} onClick={() => void changeStatus(journey, "cancelled")}>Cancel</button>
-                    </>}
+                  <div>
+                    <span>TO</span>
+                    <strong>{journey.destination_name}</strong>
+                    {journey.destination_address && <small>{journey.destination_address}</small>}
                   </div>
-                  {journey.status === "active" && (
-                    <JourneyWebGpsControls
-                      journey={journey}
-                      onUpdated={() => void loadJourneys()}
-                    />
+                </div>
+
+                <div className="tsc-journey-meta">
+                  <span>
+                    Departure: {displayDate(journey.departure_at, journey.departure_timezone)}
+                  </span>
+                  <span>
+                    Arrival: {displayDate(journey.expected_arrival_at, journey.arrival_timezone)}
+                  </span>
+                </div>
+
+                {journey.notes && <p className="tsc-journey-notes">{journey.notes}</p>}
+
+                <div className="tsc-card-actions">
+                  <button
+                    type="button"
+                    className="tsc-button tsc-button-light"
+                    onClick={() => openJourneyDetails(journey)}
+                  >
+                    View details
+                  </button>
+
+                  {journey.status === "draft" && (
+                    <>
+                      <button
+                        className="tsc-button tsc-button-light"
+                        onClick={() => editJourney(journey)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="tsc-button tsc-button-primary"
+                        disabled={saving}
+                        onClick={() => void changeStatus(journey, "scheduled")}
+                      >
+                        Schedule journey
+                      </button>
+                      <button
+                        className="tsc-button tsc-button-danger"
+                        disabled={saving}
+                        onClick={() => void changeStatus(journey, "cancelled")}
+                      >
+                        Cancel
+                      </button>
+                    </>
                   )}
-                </article>
-              ))}
-            </div>
-          )
-        }
+
+                  {journey.status === "scheduled" && (
+                    <>
+                      <button
+                        className="tsc-button tsc-button-light"
+                        onClick={() => editJourney(journey)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="tsc-button tsc-button-primary"
+                        disabled={saving}
+                        onClick={() => void changeStatus(journey, "active")}
+                      >
+                        Start journey
+                      </button>
+                      <button
+                        className="tsc-button tsc-button-danger"
+                        disabled={saving}
+                        onClick={() => void changeStatus(journey, "cancelled")}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+
+                  {journey.status === "active" && (
+                    <>
+                      <span className="tsc-live-note">Journey in progress</span>
+                      <button
+                        className="tsc-button tsc-button-primary"
+                        disabled={saving}
+                        onClick={() => void changeStatus(journey, "completed")}
+                      >
+                        Complete journey
+                      </button>
+                      <button
+                        className="tsc-button tsc-button-danger"
+                        disabled={saving}
+                        onClick={() => void changeStatus(journey, "cancelled")}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {journey.status === "active" && (
+                  <JourneyWebGpsControls
+                    journey={journey}
+                    onUpdated={() => void loadJourneys()}
+                  />
+                )}
+              </article>
+            ))}
+          </div>
+        )}
       </section>
-      <p className="tsc-safety-note">TSC journey management supports your travel planning. For immediate danger or urgent assistance, contact the appropriate local emergency services.</p>
-      <footer className="tsc-page-footer"><span>TRAVELLERS SAFETY COVERED</span><Link href="/dashboard">Return to dashboard</Link></footer>
+
+      {detailsJourney && (
+        <div
+          className="tsc-journey-details-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDetailsJourney(null);
+          }}
+        >
+          <section
+            className="tsc-journey-details-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tsc-journey-details-title"
+          >
+            <header className="tsc-journey-details-header">
+              <div>
+                <span className="tsc-eyebrow">JOURNEY INFORMATION</span>
+                <h2 id="tsc-journey-details-title">{detailsJourney.journey_name}</h2>
+              </div>
+              <button
+                type="button"
+                className="tsc-icon-button"
+                onClick={() => setDetailsJourney(null)}
+                aria-label="Close journey details"
+              >
+                ×
+              </button>
+            </header>
+
+            <div className="tsc-journey-details-status">
+              <span className={statusClass(detailsJourney.status)}>
+                {statusLabels[detailsJourney.status]}
+              </span>
+              <span>
+                {transportLabels[detailsJourney.transport_mode] || detailsJourney.transport_mode}
+              </span>
+            </div>
+
+            <div className="tsc-journey-details-section">
+              <h3>Route information</h3>
+              <div className="tsc-journey-details-grid">
+                <div>
+                  <span>Origin</span>
+                  <strong>{detailsJourney.origin_name}</strong>
+                  <small>{detailsJourney.origin_address || "No address provided"}</small>
+                </div>
+                <div>
+                  <span>Destination</span>
+                  <strong>{detailsJourney.destination_name}</strong>
+                  <small>{detailsJourney.destination_address || "No address provided"}</small>
+                </div>
+              </div>
+            </div>
+
+            <div className="tsc-journey-details-section">
+              <h3>Travel schedule</h3>
+              <div className="tsc-journey-details-grid">
+                <div>
+                  <span>Departure</span>
+                  <strong>{displayDate(detailsJourney.departure_at, detailsJourney.departure_timezone)}</strong>
+                  <small>{detailsJourney.departure_timezone || "Time zone not recorded"}</small>
+                </div>
+                <div>
+                  <span>Expected arrival</span>
+                  <strong>{displayDate(detailsJourney.expected_arrival_at, detailsJourney.arrival_timezone)}</strong>
+                  <small>{detailsJourney.arrival_timezone || "Time zone not recorded"}</small>
+                </div>
+              </div>
+            </div>
+
+            <div className="tsc-journey-details-section">
+              <h3>Journey progress</h3>
+              <div className="tsc-journey-details-grid">
+                <div>
+                  <span>Journey started</span>
+                  <strong>{displayDate(detailsJourney.started_at)}</strong>
+                </div>
+                <div>
+                  <span>Journey completed</span>
+                  <strong>{displayDate(detailsJourney.completed_at)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="tsc-journey-details-section">
+              <h3>Location sharing</h3>
+              <div className="tsc-journey-details-grid">
+                <div>
+                  <span>Sharing status</span>
+                  <strong>
+                    {detailsJourney.location_sharing_enabled ? "Enabled" : "Off"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Consent recorded</span>
+                  <strong>
+                    {displayDate(detailsJourney.location_sharing_consent_at)}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="tsc-journey-details-section">
+              <h3>Additional information</h3>
+              <p className="tsc-journey-details-notes">
+                {detailsJourney.notes || "No additional notes were provided for this journey."}
+              </p>
+              <div className="tsc-journey-details-grid">
+                <div>
+                  <span>Created</span>
+                  <strong>{displayDate(detailsJourney.created_at)}</strong>
+                </div>
+                <div>
+                  <span>Last updated</span>
+                  <strong>{displayDate(detailsJourney.updated_at)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <footer className="tsc-journey-details-footer">
+              <button
+                type="button"
+                className="tsc-button tsc-button-light"
+                onClick={() => setDetailsJourney(null)}
+              >
+                Close details
+              </button>
+              {(detailsJourney.status === "draft" || detailsJourney.status === "scheduled") && (
+                <button
+                  type="button"
+                  className="tsc-button tsc-button-primary"
+                  onClick={() => {
+                    const journey = detailsJourney;
+                    setDetailsJourney(null);
+                    editJourney(journey);
+                  }}
+                >
+                  Edit journey
+                </button>
+              )}
+            </footer>
+          </section>
+        </div>
+      )}
+
+      <p className="tsc-safety-note">
+        TSC journey management supports your travel planning. For immediate
+        danger or urgent assistance, contact the appropriate local emergency services.
+      </p>
+
+      <footer className="tsc-page-footer">
+        <span>TRAVELLERS SAFETY COVERED</span>
+        <Link href="/dashboard">Return to dashboard</Link>
+      </footer>
+
+      <span className="sr-only" aria-hidden="true">{travellerName}</span>
     </main>
   );
 }
