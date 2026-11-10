@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 type Props = {
@@ -10,7 +10,7 @@ type Props = {
     status: string;
     location_sharing_enabled: boolean;
   };
-  onUpdated: () => void;
+  onUpdated: (enabled: boolean, consentAt?: string) => void;
 };
 
 type Coordinates = {
@@ -23,35 +23,38 @@ type Coordinates = {
 
 function distanceInMetres(a: Coordinates, b: Coordinates) {
   const radians = (value: number) => (value * Math.PI) / 180;
-  const earthRadius = 6_371_000;
-  const latitudeDifference = radians(b.latitude - a.latitude);
-  const longitudeDifference = radians(b.longitude - a.longitude);
+  const radius = 6371000;
+  const lat = radians(b.latitude - a.latitude);
+  const lng = radians(b.longitude - a.longitude);
   const value =
-    Math.sin(latitudeDifference / 2) ** 2 +
+    Math.sin(lat / 2) ** 2 +
     Math.cos(radians(a.latitude)) *
       Math.cos(radians(b.latitude)) *
-      Math.sin(longitudeDifference / 2) ** 2;
+      Math.sin(lng / 2) ** 2;
 
-  return earthRadius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+  return radius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 }
 
-export default function JourneyWebGpsControls({
-  journey,
-  onUpdated,
-}: Props) {
-  const supabase = createSupabaseBrowserClient();
+export default function JourneyWebGpsControls({ journey, onUpdated }: Props) {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const watchId = useRef<number | null>(null);
-  const lastUpload = useRef<{ at: number; coordinates: Coordinates } | null>(
-    null,
-  );
+  const lastUpload = useRef<{ at: number; coordinates: Coordinates } | null>(null);
   const mounted = useRef(true);
+
+  const [sharingEnabled, setSharingEnabled] = useState(
+    journey.location_sharing_enabled,
+  );
   const [tracking, setTracking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
-  const stopBrowserWatch = useCallback(() => {
-    if (watchId.current !== null && typeof navigator !== "undefined") {
-      navigator.geolocation?.clearWatch(watchId.current);
+  useEffect(() => {
+    setSharingEnabled(journey.location_sharing_enabled);
+  }, [journey.location_sharing_enabled]);
+
+  const stopWatch = useCallback(() => {
+    if (watchId.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchId.current);
       watchId.current = null;
     }
     lastUpload.current = null;
@@ -62,9 +65,8 @@ export default function JourneyWebGpsControls({
     mounted.current = true;
     return () => {
       mounted.current = false;
-      if (watchId.current !== null) {
-        navigator.geolocation?.clearWatch(watchId.current);
-        watchId.current = null;
+      if (watchId.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId.current);
       }
     };
   }, []);
@@ -76,84 +78,73 @@ export default function JourneyWebGpsControls({
 
       if (
         previous &&
-        now - previous.at < 15_000 &&
+        now - previous.at < 15000 &&
         distanceInMetres(previous.coordinates, coordinates) < 25
       ) {
         return;
       }
 
-      const { error } = await supabase.from("journey_location_updates").insert({
-        journey_id: journey.id,
-        traveller_id: journey.traveller_id,
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-        accuracy_meters: coordinates.accuracy,
-        speed_meters_per_second: coordinates.speed,
-        heading_degrees: coordinates.heading,
-        recorded_at: new Date().toISOString(),
-      });
+      const { error } = await supabase
+        .from("journey_location_updates")
+        .insert({
+          journey_id: journey.id,
+          traveller_id: journey.traveller_id,
+          latitude: coordinates.latitude,
+          longitude: coordinates.longitude,
+          accuracy_meters: coordinates.accuracy,
+          speed_meters_per_second: coordinates.speed,
+          heading_degrees: coordinates.heading,
+          recorded_at: new Date().toISOString(),
+        });
+
+      if (!mounted.current) return;
 
       if (error) {
-        if (mounted.current) {
-          setMessage(
-            "GPS is running, but the latest location could not be sent. Check your connection.",
-          );
-        }
+        setMessage("GPS is running, but the latest location could not be sent. Check your connection.");
         return;
       }
 
       lastUpload.current = { at: now, coordinates };
-      if (mounted.current) {
-        setMessage("Location sharing is active. Your latest position has been sent.");
-      }
+      setMessage("Your latest location has been shared successfully.");
     },
     [journey.id, journey.traveller_id, supabase],
   );
 
-  const startBrowserWatch = useCallback(
-    (initialPosition: GeolocationPosition) => {
+  const startWatch = useCallback(
+    (position: GeolocationPosition) => {
       if (!navigator.geolocation) {
         setMessage("Location services are not supported by this browser.");
         return;
       }
 
-      const initial: Coordinates = {
-        latitude: initialPosition.coords.latitude,
-        longitude: initialPosition.coords.longitude,
-        accuracy: initialPosition.coords.accuracy ?? null,
-        speed: initialPosition.coords.speed ?? null,
-        heading: initialPosition.coords.heading ?? null,
-      };
+      const convert = (value: GeolocationPosition): Coordinates => ({
+        latitude: value.coords.latitude,
+        longitude: value.coords.longitude,
+        accuracy: value.coords.accuracy ?? null,
+        speed: value.coords.speed ?? null,
+        heading: value.coords.heading ?? null,
+      });
 
-      void uploadPosition(initial);
+      void uploadPosition(convert(position));
 
       if (watchId.current !== null) {
         navigator.geolocation.clearWatch(watchId.current);
       }
 
       watchId.current = navigator.geolocation.watchPosition(
-        (position) => {
-          void uploadPosition({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy ?? null,
-            speed: position.coords.speed ?? null,
-            heading: position.coords.heading ?? null,
-          });
-        },
+        (next) => void uploadPosition(convert(next)),
         (error) => {
-          if (mounted.current) {
-            setMessage(
-              error.code === error.PERMISSION_DENIED
-                ? "Location permission was denied. Allow location access in your browser settings to continue."
-                : "Your browser could not obtain a new location. Check device location services.",
-            );
-          }
+          if (!mounted.current) return;
+          setMessage(
+            error.code === error.PERMISSION_DENIED
+              ? "Location permission was denied. Allow location access in your browser settings."
+              : "Unable to obtain your latest location. Check your device location services.",
+          );
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 10_000,
-          timeout: 20_000,
+          maximumAge: 10000,
+          timeout: 20000,
         },
       );
 
@@ -162,80 +153,84 @@ export default function JourneyWebGpsControls({
     [uploadPosition],
   );
 
-  const requestPosition = useCallback(
-    (onSuccess: (position: GeolocationPosition) => void) => {
+  const getPosition = useCallback((): Promise<GeolocationPosition> => {
+    return new Promise((resolve, reject) => {
       if (!window.isSecureContext) {
-        setMessage("GPS sharing requires HTTPS or localhost.");
+        reject(new Error("GPS sharing requires HTTPS or localhost."));
         return;
       }
 
       if (!navigator.geolocation) {
-        setMessage("This browser does not support location sharing.");
+        reject(new Error("This browser does not support location sharing."));
         return;
       }
 
       navigator.geolocation.getCurrentPosition(
-        onSuccess,
+        resolve,
         (error) => {
-          setMessage(
-            error.code === error.PERMISSION_DENIED
-              ? "Location permission was denied. Enable location access for this website in your browser settings."
-              : error.code === error.TIMEOUT
-                ? "The location request timed out. Check your device location services and try again."
-                : "Your current location could not be obtained. Check device location services and try again.",
+          reject(
+            new Error(
+              error.code === error.PERMISSION_DENIED
+                ? "Location permission was denied. Enable location access for this website."
+                : error.code === error.TIMEOUT
+                  ? "The location request timed out. Check your device location services."
+                  : "Your current location could not be obtained. Check device location services.",
+            ),
           );
         },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
       );
-    },
-    [],
-  );
+    });
+  }, []);
 
   async function enableSharing() {
-    if (!window.confirm(
-      "Enable GPS location sharing for this active journey? Your live location will be sent to TSC for journey monitoring. You can turn sharing off at any time.",
-    )) return;
+    if (
+      !window.confirm(
+        "Enable GPS location sharing for this active journey? Your live location will be sent to TSC for journey monitoring. You can turn sharing off at any time.",
+      )
+    ) return;
 
     setBusy(true);
     setMessage("");
 
-    requestPosition(async (position) => {
+    try {
+      const position = await getPosition();
+      const consentAt = new Date().toISOString();
+
       const { error } = await supabase
         .from("journeys")
         .update({
           location_sharing_enabled: true,
-          location_sharing_consent_at: new Date().toISOString(),
+          location_sharing_consent_at: consentAt,
         })
         .eq("id", journey.id)
         .eq("traveller_id", journey.traveller_id);
 
-      if (error) {
-        setMessage(error.message || "Your location-sharing consent could not be saved.");
-        setBusy(false);
-        return;
-      }
+      if (error) throw new Error(error.message);
 
-      startBrowserWatch(position);
-      setBusy(false);
-      onUpdated();
-    });
-
-    // The browser location prompt is asynchronous.
-    window.setTimeout(() => {
+      setSharingEnabled(true);
+      startWatch(position);
+      onUpdated(true, consentAt);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "GPS sharing could not be enabled.");
+    } finally {
       if (mounted.current) setBusy(false);
-    }, 22_000);
+    }
   }
 
-  function resumeSharing() {
+  async function resumeSharing() {
     setBusy(true);
     setMessage("");
-    requestPosition((position) => {
-      startBrowserWatch(position);
-      setBusy(false);
-    });
-    window.setTimeout(() => {
+
+    try {
+      const position = await getPosition();
+      startWatch(position);
+      setMessage("GPS tracking has resumed for this journey.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "GPS tracking could not resume.");
+    } finally {
       if (mounted.current) setBusy(false);
-    }, 22_000);
+    }
   }
 
   async function disableSharing() {
@@ -256,40 +251,37 @@ export default function JourneyWebGpsControls({
       return;
     }
 
-    stopBrowserWatch();
-    setBusy(false);
+    stopWatch();
+    setSharingEnabled(false);
     setMessage("Location sharing has been turned off.");
-    onUpdated();
+    onUpdated(false);
+    setBusy(false);
   }
 
   if (journey.status !== "active") return null;
 
   return (
-    <section
-      aria-label="Journey GPS location sharing"
-      style={{
-        marginTop: 18,
-        padding: 16,
-        border: "1px solid #dbe3ed",
-        borderRadius: 12,
-        background: "#f8fafc",
-      }}
-    >
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
+    <section className="tsc-web-gps-panel" aria-label="Journey GPS location sharing">
+      <div className="tsc-web-gps-heading">
         <div>
-          <strong style={{ color: "#102b4e", display: "block" }}>
-            GPS location sharing
-          </strong>
-          <span style={{ color: "#526174", fontSize: 13 }}>
-            {journey.location_sharing_enabled
+          <span className="tsc-web-gps-eyebrow">LIVE JOURNEY SAFETY</span>
+          <h3>GPS location sharing</h3>
+          <p>
+            {sharingEnabled
               ? tracking
-                ? "Sharing enabled · GPS tracking active"
-                : "Sharing enabled · GPS needs to be resumed in this browser"
-              : "Off · Your location is not being shared"}
-          </span>
+                ? "Your location is being shared while this page remains open."
+                : "Location sharing is enabled. Resume GPS tracking on this browser."
+              : "Share your live location during this active journey."}
+          </p>
         </div>
+        <span className={`tsc-web-gps-indicator ${tracking ? "is-live" : ""}`}>
+          <span />
+          {tracking ? "TRACKING" : sharingEnabled ? "ENABLED" : "OFF"}
+        </span>
+      </div>
 
-        {!journey.location_sharing_enabled ? (
+      <div className="tsc-web-gps-actions">
+        {!sharingEnabled ? (
           <button
             type="button"
             className="tsc-button tsc-button-primary"
@@ -308,12 +300,12 @@ export default function JourneyWebGpsControls({
             {busy ? "Updating…" : "Turn off sharing"}
           </button>
         ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <>
             <button
               type="button"
               className="tsc-button tsc-button-primary"
               disabled={busy}
-              onClick={resumeSharing}
+              onClick={() => void resumeSharing()}
             >
               {busy ? "Requesting location…" : "Resume GPS sharing"}
             </button>
@@ -325,18 +317,15 @@ export default function JourneyWebGpsControls({
             >
               Turn off sharing
             </button>
-          </div>
+          </>
         )}
       </div>
 
-      {message && (
-        <p role="status" style={{ margin: "12px 0 0", color: "#526174", fontSize: 13 }}>
-          {message}
-        </p>
-      )}
+      {message && <p className="tsc-web-gps-message" role="status">{message}</p>}
 
-      <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: 12 }}>
-        GPS updates are sent while this journey page remains open. Keep this page open and your device location enabled during the journey. Sharing can be stopped at any time.
+      <p className="tsc-web-gps-footnote">
+        Keep this journey screen open and your device location enabled during travel.
+        You can stop sharing at any time.
       </p>
     </section>
   );

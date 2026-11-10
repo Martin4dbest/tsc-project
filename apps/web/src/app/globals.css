@@ -9056,3 +9056,316 @@ a {
     }
   }
 }
+
+/* Journey details: web layout aligned with the Android journey screen */
+.tsc-mobile-match-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 30px));
+  max-height: 92vh;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #f5f8fc;
+}
+
+.tsc-mobile-match-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 25px;
+  background: #102b50;
+  color: #fff;
+}
+
+.tsc-mobile-match-header h2 {
+  margin: 6px 0 12px;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 750;
+}
+
+.tsc-mobile-match-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+}
+
+.tsc-mobile-match-badges > span:not(:first-child) {
+  padding: 5px 11px;
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 30px;
+  color: #fff;
+}
+
+.tsc-mobile-match-content {
+  display: grid;
+  gap: 14px;
+  padding: 18px 22px;
+  overflow-y: auto;
+}
+
+.tsc-mobile-match-route,
+.tsc-mobile-match-card {
+  padding: 18px;
+  border: 1px solid #e2e9f1;
+  border-radius: 15px;
+  background: #fff;
+}
+
+.tsc-mobile-match-section-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 17px;
+}
+
+.tsc-mobile-match-section-title > div > span {
+  color: #8996a8;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.tsc-mobile-match-section-title h3 {
+  margin: 3px 0 0;
+  color: #173657;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.tsc-mobile-match-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-radius: 11px;
+  background: #fff0df;
+  color: #c66b17;
+  font-size: 18px;
+}
+
+.tsc-mobile-match-route-point {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-left: 5px;
+}
+
+.tsc-mobile-match-route-point > div {
+  min-width: 0;
+  padding-bottom: 10px;
+}
+
+.tsc-mobile-match-route-point small,
+.tsc-mobile-match-info-grid small {
+  display: block;
+  color: #8491a2;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .6px;
+}
+
+.tsc-mobile-match-route-point strong,
+.tsc-mobile-match-info-grid strong {
+  display: block;
+  margin-top: 5px;
+  color: #203954;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.tsc-mobile-match-route-point p,
+.tsc-mobile-match-info-grid p {
+  margin: 4px 0 0;
+  color: #78879a;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.tsc-mobile-match-dot {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  margin-top: 17px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #183c64;
+  box-shadow: 0 0 0 2px #183c64;
+}
+
+.tsc-mobile-match-dot.destination {
+  background: #e58a32;
+  box-shadow: 0 0 0 2px #e58a32;
+}
+
+.tsc-mobile-match-route-line {
+  width: 2px;
+  height: 24px;
+  margin: -8px 0 -3px 10px;
+  background: repeating-linear-gradient(to bottom, #c5d0df 0 4px, transparent 4px 8px);
+}
+
+.tsc-mobile-match-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.tsc-mobile-match-info-grid > div {
+  min-width: 0;
+  padding: 11px;
+  border-radius: 10px;
+  background: #f6f8fb;
+}
+
+.tsc-mobile-match-notes {
+  margin: 0;
+  padding: 13px;
+  border-left: 3px solid #e99542;
+  border-radius: 8px;
+  background: #fff8ef;
+  color: #53657a;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.tsc-mobile-match-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 15px 22px;
+  border-top: 1px solid #e2e9f1;
+  background: #fff;
+}
+
+.tsc-web-gps-panel {
+  padding: 18px;
+  border: 1px solid #d9e5f1;
+  border-radius: 15px;
+  background: #edf5fc;
+}
+
+.tsc-web-gps-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tsc-web-gps-eyebrow {
+  color: #d17b27;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.tsc-web-gps-heading h3 {
+  margin: 4px 0;
+  color: #173657;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.tsc-web-gps-heading p {
+  margin: 0;
+  color: #64758a;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.tsc-web-gps-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border-radius: 30px;
+  background: #e5eaf0;
+  color: #637184;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.tsc-web-gps-indicator > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8995a4;
+}
+
+.tsc-web-gps-indicator.is-live {
+  background: #dcf7e9;
+  color: #137448;
+}
+
+.tsc-web-gps-indicator.is-live > span {
+  background: #15945a;
+}
+
+.tsc-web-gps-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.tsc-web-gps-message {
+  margin: 12px 0 0;
+  color: #355675;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.tsc-web-gps-footnote {
+  margin: 12px 0 0;
+  color: #78879a;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .tsc-mobile-match-dialog {
+    width: calc(100vw - 16px);
+    max-height: 94vh;
+    border-radius: 16px;
+  }
+
+  .tsc-mobile-match-header {
+    padding: 18px 16px;
+  }
+
+  .tsc-mobile-match-content {
+    padding: 13px;
+  }
+
+  .tsc-mobile-match-route,
+  .tsc-mobile-match-card,
+  .tsc-web-gps-panel {
+    padding: 14px;
+  }
+
+  .tsc-mobile-match-info-grid {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .tsc-mobile-match-footer {
+    padding: 12px;
+  }
+
+  .tsc-mobile-match-footer button {
+    flex: 1 1 42%;
+  }
+
+  .tsc-web-gps-heading {
+    flex-direction: column;
+  }
+}

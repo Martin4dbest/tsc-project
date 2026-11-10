@@ -628,12 +628,6 @@ export default function JourneyManagementClient({
                   )}
                 </div>
 
-                {journey.status === "active" && (
-                  <JourneyWebGpsControls
-                    journey={journey}
-                    onUpdated={() => void loadJourneys()}
-                  />
-                )}
               </article>
             ))}
           </div>
@@ -648,15 +642,21 @@ export default function JourneyManagementClient({
           }}
         >
           <section
-            className="tsc-journey-details-dialog"
+            className="tsc-journey-details-dialog tsc-mobile-match-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="tsc-journey-details-title"
           >
-            <header className="tsc-journey-details-header">
+            <header className="tsc-mobile-match-header">
               <div>
                 <span className="tsc-eyebrow">JOURNEY INFORMATION</span>
                 <h2 id="tsc-journey-details-title">{detailsJourney.journey_name}</h2>
+                <div className="tsc-mobile-match-badges">
+                  <span className={statusClass(detailsJourney.status)}>
+                    {statusLabels[detailsJourney.status]}
+                  </span>
+                  <span>{transportLabels[detailsJourney.transport_mode] || detailsJourney.transport_mode}</span>
+                </div>
               </div>
               <button
                 type="button"
@@ -668,97 +668,107 @@ export default function JourneyManagementClient({
               </button>
             </header>
 
-            <div className="tsc-journey-details-status">
-              <span className={statusClass(detailsJourney.status)}>
-                {statusLabels[detailsJourney.status]}
-              </span>
-              <span>
-                {transportLabels[detailsJourney.transport_mode] || detailsJourney.transport_mode}
-              </span>
+            <div className="tsc-mobile-match-content">
+              <section className="tsc-mobile-match-route">
+                <div className="tsc-mobile-match-section-title">
+                  <span className="tsc-mobile-match-icon">↗</span>
+                  <div>
+                    <span>YOUR JOURNEY</span>
+                    <h3>Route information</h3>
+                  </div>
+                </div>
+
+                <div className="tsc-mobile-match-route-point">
+                  <span className="tsc-mobile-match-dot origin" />
+                  <div>
+                    <small>FROM</small>
+                    <strong>{detailsJourney.origin_name}</strong>
+                    <p>{detailsJourney.origin_address || "No address provided"}</p>
+                  </div>
+                </div>
+
+                <div className="tsc-mobile-match-route-line" />
+
+                <div className="tsc-mobile-match-route-point">
+                  <span className="tsc-mobile-match-dot destination" />
+                  <div>
+                    <small>TO</small>
+                    <strong>{detailsJourney.destination_name}</strong>
+                    <p>{detailsJourney.destination_address || "No address provided"}</p>
+                  </div>
+                </div>
+              </section>
+
+              <section className="tsc-mobile-match-card">
+                <div className="tsc-mobile-match-section-title">
+                  <span className="tsc-mobile-match-icon">◷</span>
+                  <div>
+                    <span>TRAVEL DETAILS</span>
+                    <h3>Schedule and travel</h3>
+                  </div>
+                </div>
+
+                <div className="tsc-mobile-match-info-grid">
+                  <div>
+                    <small>Departure</small>
+                    <strong>{displayDate(detailsJourney.departure_at, detailsJourney.departure_timezone)}</strong>
+                    <p>{detailsJourney.departure_timezone || "Time zone not recorded"}</p>
+                  </div>
+                  <div>
+                    <small>Expected arrival</small>
+                    <strong>{displayDate(detailsJourney.expected_arrival_at, detailsJourney.arrival_timezone)}</strong>
+                    <p>{detailsJourney.arrival_timezone || "Time zone not recorded"}</p>
+                  </div>
+                  <div>
+                    <small>Transport</small>
+                    <strong>{transportLabels[detailsJourney.transport_mode] || detailsJourney.transport_mode}</strong>
+                  </div>
+                  <div>
+                    <small>Journey started</small>
+                    <strong>{displayDate(detailsJourney.started_at)}</strong>
+                  </div>
+                  <div>
+                    <small>Journey completed</small>
+                    <strong>{displayDate(detailsJourney.completed_at)}</strong>
+                  </div>
+                </div>
+              </section>
+
+              {detailsJourney.notes && (
+                <section className="tsc-mobile-match-card">
+                  <div className="tsc-mobile-match-section-title">
+                    <span className="tsc-mobile-match-icon">✎</span>
+                    <div>
+                      <span>TRAVELLER INFORMATION</span>
+                      <h3>Additional notes</h3>
+                    </div>
+                  </div>
+                  <p className="tsc-mobile-match-notes">{detailsJourney.notes}</p>
+                </section>
+              )}
+
+              {detailsJourney.status === "active" && (
+                <JourneyWebGpsControls
+                  journey={detailsJourney}
+                  onUpdated={(enabled, consentAt) => {
+                    setDetailsJourney((current) =>
+                      current
+                        ? {
+                            ...current,
+                            location_sharing_enabled: enabled,
+                            ...(consentAt
+                              ? { location_sharing_consent_at: consentAt }
+                              : {}),
+                          }
+                        : current
+                    );
+                    void loadJourneys();
+                  }}
+                />
+              )}
             </div>
 
-            <div className="tsc-journey-details-section">
-              <h3>Route information</h3>
-              <div className="tsc-journey-details-grid">
-                <div>
-                  <span>Origin</span>
-                  <strong>{detailsJourney.origin_name}</strong>
-                  <small>{detailsJourney.origin_address || "No address provided"}</small>
-                </div>
-                <div>
-                  <span>Destination</span>
-                  <strong>{detailsJourney.destination_name}</strong>
-                  <small>{detailsJourney.destination_address || "No address provided"}</small>
-                </div>
-              </div>
-            </div>
-
-            <div className="tsc-journey-details-section">
-              <h3>Travel schedule</h3>
-              <div className="tsc-journey-details-grid">
-                <div>
-                  <span>Departure</span>
-                  <strong>{displayDate(detailsJourney.departure_at, detailsJourney.departure_timezone)}</strong>
-                  <small>{detailsJourney.departure_timezone || "Time zone not recorded"}</small>
-                </div>
-                <div>
-                  <span>Expected arrival</span>
-                  <strong>{displayDate(detailsJourney.expected_arrival_at, detailsJourney.arrival_timezone)}</strong>
-                  <small>{detailsJourney.arrival_timezone || "Time zone not recorded"}</small>
-                </div>
-              </div>
-            </div>
-
-            <div className="tsc-journey-details-section">
-              <h3>Journey progress</h3>
-              <div className="tsc-journey-details-grid">
-                <div>
-                  <span>Journey started</span>
-                  <strong>{displayDate(detailsJourney.started_at)}</strong>
-                </div>
-                <div>
-                  <span>Journey completed</span>
-                  <strong>{displayDate(detailsJourney.completed_at)}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="tsc-journey-details-section">
-              <h3>Location sharing</h3>
-              <div className="tsc-journey-details-grid">
-                <div>
-                  <span>Sharing status</span>
-                  <strong>
-                    {detailsJourney.location_sharing_enabled ? "Enabled" : "Off"}
-                  </strong>
-                </div>
-                <div>
-                  <span>Consent recorded</span>
-                  <strong>
-                    {displayDate(detailsJourney.location_sharing_consent_at)}
-                  </strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="tsc-journey-details-section">
-              <h3>Additional information</h3>
-              <p className="tsc-journey-details-notes">
-                {detailsJourney.notes || "No additional notes were provided for this journey."}
-              </p>
-              <div className="tsc-journey-details-grid">
-                <div>
-                  <span>Created</span>
-                  <strong>{displayDate(detailsJourney.created_at)}</strong>
-                </div>
-                <div>
-                  <span>Last updated</span>
-                  <strong>{displayDate(detailsJourney.updated_at)}</strong>
-                </div>
-              </div>
-            </div>
-
-            <footer className="tsc-journey-details-footer">
+            <footer className="tsc-mobile-match-footer">
               <button
                 type="button"
                 className="tsc-button tsc-button-light"
@@ -766,18 +776,90 @@ export default function JourneyManagementClient({
               >
                 Close details
               </button>
-              {(detailsJourney.status === "draft" || detailsJourney.status === "scheduled") && (
-                <button
-                  type="button"
-                  className="tsc-button tsc-button-primary"
-                  onClick={() => {
-                    const journey = detailsJourney;
-                    setDetailsJourney(null);
-                    editJourney(journey);
-                  }}
-                >
-                  Edit journey
-                </button>
+
+              {detailsJourney.status === "draft" && (
+                <>
+                  <button
+                    type="button"
+                    className="tsc-button tsc-button-light"
+                    onClick={() => {
+                      const journey = detailsJourney;
+                      setDetailsJourney(null);
+                      editJourney(journey);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="tsc-button tsc-button-primary"
+                    disabled={saving}
+                    onClick={() => void changeStatus(detailsJourney, "scheduled")}
+                  >
+                    Schedule journey
+                  </button>
+                  <button
+                    type="button"
+                    className="tsc-button tsc-button-danger"
+                    disabled={saving}
+                    onClick={() => void changeStatus(detailsJourney, "cancelled")}
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+
+              {detailsJourney.status === "scheduled" && (
+                <>
+                  <button
+                    type="button"
+                    className="tsc-button tsc-button-light"
+                    onClick={() => {
+                      const journey = detailsJourney;
+                      setDetailsJourney(null);
+                      editJourney(journey);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="tsc-button tsc-button-primary"
+                    disabled={saving}
+                    onClick={() => void changeStatus(detailsJourney, "active")}
+                  >
+                    Start journey
+                  </button>
+                  <button
+                    type="button"
+                    className="tsc-button tsc-button-danger"
+                    disabled={saving}
+                    onClick={() => void changeStatus(detailsJourney, "cancelled")}
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+
+              {detailsJourney.status === "active" && (
+                <>
+                  <button
+                    type="button"
+                    className="tsc-button tsc-button-primary"
+                    disabled={saving}
+                    onClick={() => void changeStatus(detailsJourney, "completed")}
+                  >
+                    Complete journey
+                  </button>
+                  <button
+                    type="button"
+                    className="tsc-button tsc-button-danger"
+                    disabled={saving}
+                    onClick={() => void changeStatus(detailsJourney, "cancelled")}
+                  >
+                    Cancel
+                  </button>
+                </>
               )}
             </footer>
           </section>
