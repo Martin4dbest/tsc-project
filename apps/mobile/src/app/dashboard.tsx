@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  ImageBackground,
   Pressable,
   ScrollView,
   StatusBar,
@@ -20,7 +21,6 @@ type Profile = {
   account_status: string | null;
 };
 
-// Clean Neutral Theme Palette (No Blue Backgrounds)
 const DARK_COLORS = {
   background: '#111318',
   surface: '#1A1D24',
@@ -48,16 +48,85 @@ const LIGHT_COLORS = {
 };
 
 const services = [
-  { id: 'journey', icon: '✈', title: 'Journeys', subtitle: 'Plan and manage trips', color: '#F97316', bgDark: '#2C1D14', bgLight: '#FFF7ED' },
-  { id: 'wallet', icon: '◈', title: 'Wallet', subtitle: 'Balance & transactions', color: '#14B8A6', bgDark: '#122624', bgLight: '#F0FDFA' },
-  { id: 'payments', icon: '⇄', title: 'Payments', subtitle: 'Travel payments', color: '#3B82F6', bgDark: '#172033', bgLight: '#EFF6FF' },
-  { id: 'safety', icon: '🛡', title: 'Safety', subtitle: 'Travel protection', color: '#F59E0B', bgDark: '#292114', bgLight: '#FEFCE8' },
-  { id: 'tracking', icon: '◎', title: 'GPS Tracking', subtitle: 'Location services', color: '#06B6D4', bgDark: '#13252B', bgLight: '#ECFEFF' },
-  { id: 'emergency', icon: '🚨', title: 'Emergency', subtitle: 'Immediate assistance', color: '#EF4444', bgDark: '#2D1717', bgLight: '#FEF2F2' },
-  { id: 'claims', icon: '▤', title: 'Claims', subtitle: 'Claims & compensation', color: '#8B5CF6', bgDark: '#231B33', bgLight: '#F5F3FF' },
-  { id: 'partners', icon: '♧', title: 'Partners', subtitle: 'Service network', color: '#10B981', bgDark: '#132820', bgLight: '#ECFDF5' },
-  { id: 'insights', icon: '▥', title: 'Insights', subtitle: 'Travel analytics', color: '#6366F1', bgDark: '#1B1C33', bgLight: '#EEF2FF' },
+  {
+    id: 'journey',
+    icon: '✈',
+    title: 'Journey Management',
+    subtitle: 'Plan and manage your trips',
+    color: '#F97316',
+    image: 'photo-1436491865332-7a61a109cc05',
+  },
+  {
+    id: 'wallet',
+    icon: '◈',
+    title: 'Wallet Management',
+    subtitle: 'Balance and transactions',
+    color: '#14B8A6',
+    image: 'photo-1554224155-6726b3ff858f',
+  },
+  {
+    id: 'payments',
+    icon: '⇄',
+    title: 'Payments',
+    subtitle: 'Secure travel payments',
+    color: '#3B82F6',
+    image: 'photo-1556742049-0cfed4f6a45d',
+  },
+  {
+    id: 'safety',
+    icon: '🛡',
+    title: 'Safety Protection',
+    subtitle: 'Protection throughout your trip',
+    color: '#F59E0B',
+    image: 'photo-1519681393784-d120267933ba',
+  },
+  {
+    id: 'tracking',
+    icon: '◎',
+    title: 'GPS Tracking',
+    subtitle: 'Journey location services',
+    color: '#06B6D4',
+    image: 'photo-1473448912268-2022ce9509d8',
+  },
+  {
+    id: 'emergency',
+    icon: '🚨',
+    title: 'Emergency Operations',
+    subtitle: 'Get assistance when needed',
+    color: '#EF4444',
+    image: 'photo-1584515933487-779824d29309',
+  },
+  {
+    id: 'claims',
+    icon: '▤',
+    title: 'Claims & Compensation',
+    subtitle: 'Manage claims and support',
+    color: '#8B5CF6',
+    image: 'photo-1450101499163-c8848c66ca85',
+  },
+  {
+    id: 'partners',
+    icon: '♧',
+    title: 'Travel Partners',
+    subtitle: 'Explore our service network',
+    color: '#10B981',
+    image: 'photo-1521737711867-e3b97375f902',
+  },
+  {
+    id: 'insights',
+    icon: '▥',
+    title: 'Analytics & Intelligence',
+    subtitle: 'Your travel insights',
+    color: '#6366F1',
+    image: 'photo-1516321318423-f06f85e504b3',
+  },
 ];
+
+const availableServices = ['journey', 'tracking', 'emergency'];
+
+function serviceImageUrl(photo: string) {
+  return `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=1000&q=85`;
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -72,11 +141,13 @@ export default function DashboardScreen() {
   const colors = darkMode ? DARK_COLORS : LIGHT_COLORS;
   const columns = width >= 600 ? 3 : 2;
   const gap = 12;
-  const cardWidth = (width - 40 - (columns - 1) * gap) / columns;
+  const horizontalPadding = 40;
+  const cardWidth = (width - horizontalPadding - (columns - 1) * gap) / columns;
 
   const loadProfile = useCallback(async () => {
     try {
       setError('');
+
       const {
         data: { session },
         error: sessionError,
@@ -93,7 +164,12 @@ export default function DashboardScreen() {
         .eq('user_id', session.user.id)
         .single();
 
-      if (profileError || !data || data.role !== 'traveller' || data.account_status !== 'active') {
+      if (
+        profileError ||
+        !data ||
+        data.role !== 'traveller' ||
+        data.account_status !== 'active'
+      ) {
         await supabase.auth.signOut();
         router.replace('/login');
         return;
@@ -109,211 +185,445 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     loadProfile();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') router.replace('/login');
     });
+
     return () => subscription.unsubscribe();
   }, [loadProfile, router]);
 
   const handleSignOut = async () => {
     if (signingOut) return;
+
     setSigningOut(true);
+
     const { error: signOutError } = await supabase.auth.signOut();
+
     if (signOutError) {
       setError('Unable to sign out. Please try again.');
       setSigningOut(false);
       return;
     }
+
     router.replace('/');
+  };
+
+  const openService = (serviceId: string) => {
+    if (serviceId === 'journey') router.push('/journeys');
+    if (serviceId === 'tracking') router.push('/gps-tracking');
+    if (serviceId === 'emergency') router.push('/emergency');
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[
+          styles.loadingScreen,
+          { backgroundColor: colors.background },
+        ]}
+      >
         <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-        <View style={[styles.logoContainer, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+
+        <View
+          style={[
+            styles.logoContainer,
+            {
+              backgroundColor: colors.surfaceCard,
+              borderColor: colors.border,
+            },
+          ]}
+        >
           <Image
             source={require('../../assets/tsc-header-logo.png')}
             style={styles.logoImage}
             resizeMode="contain"
           />
         </View>
-        <ActivityIndicator size="small" color={colors.accent} style={{ marginTop: 20 }} />
-        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading your dashboard...</Text>
+
+        <ActivityIndicator
+          size="small"
+          color={colors.accent}
+          style={{ marginTop: 20 }}
+        />
+
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+          Loading your dashboard...
+        </Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+    <SafeAreaView
+      style={[styles.screen, { backgroundColor: colors.background }]}
+      edges={['top', 'left', 'right']}
+    >
       <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* HEADER */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <View style={styles.brand}>
-            <View style={[styles.logoContainer, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+            <View
+              style={[
+                styles.logoContainer,
+                {
+                  backgroundColor: colors.surfaceCard,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
               <Image
                 source={require('../../assets/tsc-header-logo.png')}
                 style={styles.logoImage}
                 resizeMode="contain"
               />
             </View>
+
             <View>
-              <Text style={[styles.brandName, { color: colors.textPrimary }]}>TSC</Text>
-              <Text style={[styles.brandCaption, { color: colors.textMuted }]}>TRAVEL SAFETY</Text>
+              <Text style={[styles.brandName, { color: colors.textPrimary }]}>
+                TSC
+              </Text>
+              <Text style={[styles.brandCaption, { color: colors.textMuted }]}>
+                TRAVEL SAFETY
+              </Text>
             </View>
           </View>
 
           <View style={styles.headerActions}>
             <Pressable
-              onPress={() => setDarkMode((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={
+                darkMode ? 'Switch to light mode' : 'Switch to dark mode'
+              }
+              onPress={() => setDarkMode((value) => !value)}
               style={({ pressed }) => [
                 styles.iconButton,
-                { backgroundColor: colors.surfaceCard, borderColor: colors.border },
+                {
+                  backgroundColor: colors.surfaceCard,
+                  borderColor: colors.border,
+                },
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={styles.iconButtonText}>{darkMode ? '☀' : '☾'}</Text>
+              <Text style={styles.iconButtonText}>
+                {darkMode ? '☀' : '☾'}
+              </Text>
             </Pressable>
 
             <Pressable
+              accessibilityRole="button"
               onPress={handleSignOut}
               disabled={signingOut}
               style={({ pressed }) => [
                 styles.signOutButton,
-                { borderColor: colors.border, backgroundColor: colors.surfaceCard },
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.surfaceCard,
+                },
                 pressed && styles.pressed,
               ]}
             >
               {signingOut ? (
                 <ActivityIndicator size="small" color={colors.accent} />
               ) : (
-                <Text style={[styles.signOutText, { color: colors.accent }]}>Sign out ↗</Text>
+                <Text style={[styles.signOutText, { color: colors.accent }]}>
+                  Sign out ↗
+                </Text>
               )}
             </Pressable>
           </View>
         </View>
 
         {/* WELCOME BANNER */}
-        <View style={[styles.welcomeSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View
+          style={[
+            styles.welcomeSection,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
           <View style={styles.welcomeText}>
-            <Text style={[styles.eyebrow, { color: colors.accent }]}>TRAVELLER DASHBOARD</Text>
+            <Text style={[styles.eyebrow, { color: colors.accent }]}>
+              TRAVELLER DASHBOARD
+            </Text>
+
             <Text style={[styles.greeting, { color: colors.textSecondary }]}>
               Welcome{profile?.full_name ? ',' : ''}
             </Text>
-            <Text style={[styles.userName, { color: colors.textPrimary }]} numberOfLines={1}>
+
+            <Text
+              style={[styles.userName, { color: colors.textPrimary }]}
+              numberOfLines={1}
+            >
               {profile?.full_name || 'Traveller'}
             </Text>
-            <Text style={[styles.welcomeSubtext, { color: colors.textMuted }]}>
+
+            <Text
+              style={[styles.welcomeSubtext, { color: colors.textMuted }]}
+            >
               Your journeys. Your safety. One place.
             </Text>
           </View>
 
-          <View style={[styles.globeCircle, { borderColor: colors.border, backgroundColor: colors.surfaceCard }]}>
-            <Text style={[styles.globeIcon, { color: colors.accent }]}>◎</Text>
-            <View style={[styles.globeDot, { backgroundColor: colors.success, borderColor: colors.surface }]} />
+          <View
+            style={[
+              styles.globeCircle,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.surfaceCard,
+              },
+            ]}
+          >
+            <Text style={[styles.globeIcon, { color: colors.accent }]}>
+              ◎
+            </Text>
+
+            <View
+              style={[
+                styles.globeDot,
+                {
+                  backgroundColor: colors.success,
+                  borderColor: colors.surface,
+                },
+              ]}
+            />
           </View>
         </View>
 
         {/* ACCOUNT STATUS */}
-        <View style={[styles.statusBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View
+          style={[
+            styles.statusBar,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
           <View style={styles.statusLeft}>
-            <View style={[styles.onlineDot, { backgroundColor: colors.success }]} />
-            <Text style={[styles.statusLabel, { color: colors.success }]}>ACCOUNT ACTIVE</Text>
+            <View
+              style={[styles.onlineDot, { backgroundColor: colors.success }]}
+            />
+            <Text style={[styles.statusLabel, { color: colors.success }]}>
+              ACCOUNT ACTIVE
+            </Text>
           </View>
-          <Text style={[styles.statusRight, { color: colors.textMuted }]}>TSC TRAVELLER</Text>
+
+          <Text style={[styles.statusRight, { color: colors.textMuted }]}>
+            TSC TRAVELLER
+          </Text>
         </View>
 
         {/* QUICK OVERVIEW */}
         <View style={styles.sectionHeading}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Overview</Text>
-          <Text style={[styles.sectionHint, { color: colors.textMuted }]}>YOUR TRAVEL SPACE</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Overview
+          </Text>
+          <Text style={[styles.sectionHint, { color: colors.textMuted }]}>
+            YOUR TRAVEL SPACE
+          </Text>
         </View>
 
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open your journeys"
           onPress={() => router.push('/journeys')}
           style={({ pressed }) => [
             styles.overviewCard,
-            { backgroundColor: colors.surface, borderColor: colors.border },
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
             pressed && styles.pressedCard,
           ]}
         >
-          <View style={[styles.overviewIcon, { backgroundColor: darkMode ? '#2C1D14' : '#FFF7ED' }]}>
-            <Text style={[styles.overviewIconText, { color: colors.accent }]}>✈</Text>
+          <View
+            style={[
+              styles.overviewIcon,
+              { backgroundColor: darkMode ? '#2C1D14' : '#FFF7ED' },
+            ]}
+          >
+            <Text style={[styles.overviewIconText, { color: colors.accent }]}>
+              ✈
+            </Text>
           </View>
+
           <View style={styles.overviewDetails}>
-            <Text style={[styles.overviewTitle, { color: colors.textPrimary }]}>Your journeys</Text>
-            <Text style={[styles.overviewDescription, { color: colors.textSecondary }]}>
+            <Text
+              style={[styles.overviewTitle, { color: colors.textPrimary }]}
+            >
+              Your journeys
+            </Text>
+            <Text
+              style={[
+                styles.overviewDescription,
+                { color: colors.textSecondary },
+              ]}
+            >
               Your journey activity will appear here.
             </Text>
           </View>
-          <View style={[styles.overviewArrow, { backgroundColor: colors.surfaceCard }]}>
-            <Text style={[styles.arrowText, { color: colors.accent }]}>›</Text>
+
+          <View
+            style={[
+              styles.overviewArrow,
+              { backgroundColor: colors.surfaceCard },
+            ]}
+          >
+            <Text style={[styles.arrowText, { color: colors.accent }]}>
+              ›
+            </Text>
           </View>
         </Pressable>
 
-        {/* SERVICES GRID WITH DISTINCT TILE BACKGROUNDS */}
+        {/* SERVICES */}
         <View style={styles.sectionHeading}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Services</Text>
-          <Text style={[styles.sectionHint, { color: colors.textMuted }]}>EXPLORE TSC</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Services
+          </Text>
+          <Text style={[styles.sectionHint, { color: colors.textMuted }]}>
+            EXPLORE TSC
+          </Text>
         </View>
 
         <View style={styles.serviceGrid}>
           {services.map((service) => {
-            const cardBg = darkMode ? service.bgDark : service.bgLight;
+            const isAvailable = availableServices.includes(service.id);
+
             return (
               <Pressable
                 key={service.id}
-                onPress={() => {
-                  if (service.id === 'journey') router.push('/journeys');
-                  if (service.id === 'tracking') router.push('/gps-tracking');
-                  if (service.id === 'emergency') router.push('/emergency');
-                }}
+                accessibilityRole="button"
+                accessibilityLabel={`${service.title}. ${
+                  isAvailable ? 'Available' : 'Coming soon'
+                }`}
+                disabled={!isAvailable}
+                onPress={() => openService(service.id)}
                 style={({ pressed }) => [
                   styles.serviceCard,
                   {
                     width: cardWidth,
-                    backgroundColor: cardBg,
-                    borderColor: `${service.color}44`,
+                    borderColor: `${service.color}99`,
                   },
                   pressed && styles.pressedCard,
                 ]}
               >
-                <View style={[styles.serviceIcon, { backgroundColor: `${service.color}25` }]}>
-                  <Text style={[styles.serviceIconText, { color: service.color }]}>
-                    {service.icon}
-                  </Text>
-                </View>
+                <ImageBackground
+                  source={{ uri: serviceImageUrl(service.image) }}
+                  style={styles.serviceImage}
+                  imageStyle={styles.serviceImageBackground}
+                  resizeMode="cover"
+                >
+                  <View style={styles.serviceImageOverlay} />
 
-                <View>
-                  <Text style={[styles.serviceTitle, { color: colors.textPrimary }]}>{service.title}</Text>
-                  <Text style={[styles.serviceSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {service.subtitle}
-                  </Text>
-                </View>
+                  <View style={styles.serviceCardContent}>
+                    <View
+                      style={[
+                        styles.serviceIcon,
+                        {
+                          backgroundColor: `${service.color}35`,
+                          borderColor: `${service.color}99`,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.serviceIconText,
+                          { color: '#FFFFFF' },
+                        ]}
+                      >
+                        {service.icon}
+                      </Text>
+                    </View>
 
-                <View style={styles.serviceFooter}>
-                  <View style={[styles.serviceDot, { backgroundColor: service.color }]} />
-                  <Text style={[styles.serviceStatus, { color: service.id === 'journey' || service.id === 'tracking' || service.id === 'emergency' ? colors.success : colors.textMuted }]}>
-                    {service.id === 'journey' || service.id === 'tracking' || service.id === 'emergency' ? 'Available' : 'Coming soon'}
-                  </Text>
-                </View>
+                    <View style={styles.serviceTextBlock}>
+                      <Text
+                        style={styles.serviceTitle}
+                        numberOfLines={2}
+                      >
+                        {service.title}
+                      </Text>
+
+                      <Text
+                        style={styles.serviceSubtitle}
+                        numberOfLines={2}
+                      >
+                        {service.subtitle}
+                      </Text>
+                    </View>
+
+                    <View style={styles.serviceFooter}>
+                      <View
+                        style={[
+                          styles.serviceDot,
+                          { backgroundColor: service.color },
+                        ]}
+                      />
+
+                      <Text
+                        style={[
+                          styles.serviceStatus,
+                          {
+                            color: isAvailable ? '#A7F3D0' : '#E5E7EB',
+                          },
+                        ]}
+                      >
+                        {isAvailable ? 'Available' : 'Coming soon'}
+                      </Text>
+
+                      {isAvailable && (
+                        <Text style={styles.serviceArrow}>›</Text>
+                      )}
+                    </View>
+                  </View>
+                </ImageBackground>
               </Pressable>
             );
           })}
         </View>
 
         {/* SAFETY NOTICE */}
-        <View style={[styles.safetyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.safetyIcon, { backgroundColor: darkMode ? '#292114' : '#FEFCE8' }]}>
-            <Text style={[styles.safetyIconText, { color: '#F59E0B' }]}>!</Text>
+        <View
+          style={[
+            styles.safetyCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.safetyIcon,
+              { backgroundColor: darkMode ? '#292114' : '#FEFCE8' },
+            ]}
+          >
+            <Text style={[styles.safetyIconText, { color: '#F59E0B' }]}>
+              !
+            </Text>
           </View>
 
           <View style={styles.safetyContent}>
-            <Text style={[styles.safetyTitle, { color: '#F59E0B' }]}>Travel safely</Text>
-            <Text style={[styles.safetyDescription, { color: colors.textSecondary }]}>
-              Stay aware of your surroundings and follow local safety guidance during your journey.
+            <Text style={[styles.safetyTitle, { color: '#F59E0B' }]}>
+              Travel safely
+            </Text>
+            <Text
+              style={[
+                styles.safetyDescription,
+                { color: colors.textSecondary },
+              ]}
+            >
+              Stay aware of your surroundings and follow local safety guidance
+              during your journey.
             </Text>
           </View>
         </View>
@@ -322,16 +632,25 @@ export default function DashboardScreen() {
         {!!error && (
           <View style={styles.errorCard}>
             <Text style={styles.errorText}>{error}</Text>
-            <Pressable onPress={loadProfile}>
-              <Text style={[styles.retryText, { color: colors.accentLight }]}>Try again</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={loadProfile}
+            >
+              <Text style={[styles.retryText, { color: colors.accentLight }]}>
+                Try again
+              </Text>
             </Pressable>
           </View>
         )}
 
         {/* FOOTER */}
         <View style={styles.footer}>
-          <Text style={[styles.footerBrand, { color: colors.accent }]}>TSC</Text>
-          <Text style={[styles.footerText, { color: colors.textMuted }]}>TRAVELLERS SAFETY COVERED</Text>
+          <Text style={[styles.footerBrand, { color: colors.accent }]}>
+            TSC
+          </Text>
+          <Text style={[styles.footerText, { color: colors.textMuted }]}>
+            TRAVELLERS SAFETY COVERED
+          </Text>
           <Text style={[styles.footerCopyright, { color: colors.textMuted }]}>
             Travel with greater awareness.
           </Text>
@@ -577,46 +896,79 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   serviceCard: {
-    minHeight: 136,
-    borderRadius: 16,
+    minHeight: 174,
+    borderRadius: 17,
     borderWidth: 1.5,
-    padding: 14,
+    overflow: 'hidden',
+    backgroundColor: '#202631',
+  },
+  serviceImage: {
+    flex: 1,
+    minHeight: 174,
+    justifyContent: 'flex-end',
+  },
+  serviceImageBackground: {
+    borderRadius: 15,
+  },
+  serviceImageOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(8, 15, 28, 0.68)',
+  },
+  serviceCardContent: {
+    flex: 1,
+    minHeight: 174,
+    padding: 13,
     justifyContent: 'space-between',
   },
   serviceIcon: {
     width: 38,
     height: 38,
     borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 9,
   },
   serviceIconText: {
     fontSize: 18,
     fontWeight: '700',
   },
+  serviceTextBlock: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   serviceTitle: {
+    color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '700',
+    lineHeight: 18,
+    fontWeight: '800',
   },
   serviceSubtitle: {
-    fontSize: 11,
-    marginTop: 2,
+    color: '#E5E7EB',
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 4,
   },
   serviceFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 10,
     gap: 6,
   },
   serviceDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
   serviceStatus: {
-    fontSize: 9,
-    fontWeight: '500',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  serviceArrow: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 18,
+    marginLeft: 'auto',
   },
   safetyCard: {
     marginTop: 20,

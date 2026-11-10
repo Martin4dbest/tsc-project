@@ -8334,3 +8334,182 @@ a {
   font-weight: 800;
 }
 .traveller-service-status[href]:hover { text-decoration: underline; }
+
+/* =========================================================
+   TSC TRAVELLER DASHBOARD — IMAGE-LED SERVICE CARDS
+   ========================================================= */
+
+.traveller-service-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.traveller-service-card {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  border: 1px solid #e4e9f1;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(16, 37, 75, .065);
+  transition: transform .22s ease, box-shadow .22s ease;
+}
+
+.traveller-service-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--service-accent);
+  box-shadow: 0 16px 34px rgba(16, 37, 75, .13);
+}
+
+.traveller-service-image {
+  position: relative;
+  min-height: 174px;
+  width: 100%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.traveller-service-number {
+  position: absolute;
+  top: 14px;
+  left: 15px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255,255,255,.45);
+  border-radius: 11px;
+  background: rgba(10, 24, 44, .48);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  backdrop-filter: blur(8px);
+}
+
+.traveller-service-image-label {
+  position: absolute;
+  right: 14px;
+  bottom: 13px;
+  color: rgba(255,255,255,.9);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.traveller-service-content {
+  flex: 1;
+  padding: 18px 19px 17px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  border-top: 3px solid var(--service-accent);
+}
+
+.traveller-service-category {
+  margin: 0;
+  color: var(--service-accent);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .9px;
+  line-height: 1.5;
+}
+
+.traveller-service-card h3 {
+  margin: 8px 0 6px;
+  color: #10254b;
+  font-size: 18px;
+  font-weight: 780;
+}
+
+.traveller-service-card > .traveller-service-content > p {
+  min-height: 47px;
+  margin: 0;
+  color: #65748b;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.traveller-service-bottom {
+  width: 100%;
+  margin-top: auto;
+  padding-top: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.traveller-service-status,
+.traveller-service-coming {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--service-accent) 12%, white);
+  color: #183253;
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.traveller-service-status:hover {
+  background: color-mix(in srgb, var(--service-accent) 22%, white);
+}
+
+.traveller-service-coming {
+  color: #718096;
+  background: #f1f4f8;
+}
+
+.traveller-service-arrow {
+  color: var(--service-accent);
+  font-size: 23px;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .traveller-service-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .traveller-service-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .traveller-service-image {
+    min-height: 158px;
+  }
+
+  .traveller-service-content {
+    padding: 16px;
+  }
+
+  .traveller-service-card h3 {
+    font-size: 17px;
+  }
+
+  .traveller-service-card > .traveller-service-content > p {
+    min-height: 0;
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .traveller-service-card {
+    transition: none;
+  }
+
+  .traveller-service-card:hover {
+    transform: none;
+  }
+}
