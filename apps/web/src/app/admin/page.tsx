@@ -127,12 +127,12 @@ export default async function AdminDashboard() {
     {
       title: "Protection Management",
       description: "Oversee traveller safety protection plans and coverage records.",
-      href: null,
+      href: "/admin/protection",
       icon: "⬡",
       color: "teal",
       label: "Protection services",
       available: protectionAccess.authorized,
-      status: "Coming soon",
+      status: "Open module",
     },
     {
       title: "Claims & Compensation",
@@ -199,6 +199,12 @@ export default async function AdminDashboard() {
           {emergencyAccess.authorized && (
             <a href="/admin/emergencies" className="tsc-nav-link">
               <span>!</span> Emergency Operations
+            </a>
+          )}
+
+          {protectionAccess.authorized && (
+            <a href="/admin/protection" className="tsc-nav-link">
+              <span>⬡</span> Protection Management
             </a>
           )}
 
