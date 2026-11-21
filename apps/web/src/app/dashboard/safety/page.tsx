@@ -2,6 +2,7 @@ export const instant = false;
 
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import SafetyProfileClient from "./SafetyProfileClient";
 
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default async function SafetyProtectionPage() {
+  await connection();
   const supabase = await createSupabaseServerClient();
 
   const {

@@ -1,6 +1,7 @@
 export const instant = false;
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import EmergencySupportClient from "./EmergencySupportClient";
 
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function EmergencySupportPage() {
+  await connection();
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
 

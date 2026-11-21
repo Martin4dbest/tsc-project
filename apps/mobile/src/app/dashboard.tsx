@@ -122,7 +122,7 @@ const services = [
   },
 ];
 
-const availableServices = ['journey', 'tracking', 'emergency'];
+const availableServices = ['journey', 'tracking', 'emergency', 'safety', 'wallet'];
 
 function serviceImageUrl(photo: string) {
   return `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=1000&q=85`;
@@ -215,6 +215,8 @@ export default function DashboardScreen() {
     if (serviceId === 'journey') router.push('/journeys');
     if (serviceId === 'tracking') router.push('/gps-tracking');
     if (serviceId === 'emergency') router.push('/emergency');
+    if (serviceId === 'safety') router.push('/safety');
+    if (serviceId === 'wallet') router.push('/wallet');
   };
 
   if (loading) {

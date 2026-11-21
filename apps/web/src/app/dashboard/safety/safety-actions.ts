@@ -52,12 +52,12 @@ async function writeSafetyAudit(
     const admin = createSupabaseAdminClient();
 
     await admin.from("tsc_safety_audit_logs").insert({
-      actor_id: travellerId,
+      actor_user_id: travellerId,
       traveller_id: travellerId,
       entity_type: entityType,
       entity_id: entityId,
       event_type: eventType,
-      actor_type: "traveller",
+      actor_type: "user",
       details: {},
     });
   } catch (error) {

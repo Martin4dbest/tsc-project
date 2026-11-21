@@ -9394,3 +9394,10 @@ a {
     height: 280px;
   }
 }
+
+/* =========================================================
+
+/* Slightly increase application-wide typography */
+html {
+  font-size: 17px;
+}

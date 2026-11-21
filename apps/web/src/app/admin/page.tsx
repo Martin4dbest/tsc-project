@@ -97,12 +97,12 @@ export default async function AdminDashboard() {
     {
       title: "Wallet Management",
       description: "View traveller wallet balances, recharge activity and transaction records.",
-      href: null,
+      href: "/admin/wallet",
       icon: "▤",
       color: "green",
       label: "Financial operations",
       available: walletAccess.authorized,
-      status: "Coming soon",
+      status: "Open module",
     },
     {
       title: "Payment Operations",
@@ -195,6 +195,12 @@ export default async function AdminDashboard() {
               <span>⌖</span> Journey Monitoring
             </a>
           )}
+          {walletAccess.authorized && (
+            <a href="/admin/wallet" className="tsc-nav-link">
+              <span>▤</span> Wallet Management
+            </a>
+          )}
+
 
           {emergencyAccess.authorized && (
             <a href="/admin/emergencies" className="tsc-nav-link">

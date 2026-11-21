@@ -27,6 +27,7 @@ const services = [
     category: "WALLET MANAGEMENT",
     title: "My Wallet",
     description: "View your wallet, balances and transaction history.",
+    href: "/dashboard/wallet",
     image: "photo-1554224155-6726b3ff858f",
     accent: "#14B8A6",
   },
@@ -45,6 +46,7 @@ const services = [
     description: "Explore trip-based protection and manage your travel coverage.",
     image: "photo-1519681393784-d120267933ba",
     accent: "#FBBF24",
+    href: "/dashboard/safety",
   },
   {
     number: "05",
@@ -53,6 +55,7 @@ const services = [
     description: "Manage location sharing and journey tracking.",
     image: "photo-1473448912268-2022ce9509d8",
     accent: "#22D3EE",
+    href: "/dashboard/gps-tracking",
   },
   {
     number: "06",
