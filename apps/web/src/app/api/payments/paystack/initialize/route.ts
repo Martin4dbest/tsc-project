@@ -76,18 +76,38 @@ export async function POST(request: NextRequest) {
     if (platform === "mobile") {
       const returnUrl = body.returnUrl;
 
-      if (
-        typeof returnUrl !== "string" ||
-        (!/^exp:\/\//.test(returnUrl) && !/^tsc:\/\//.test(returnUrl))
-      ) {
+      if (typeof returnUrl !== "string") {
         return NextResponse.json(
           { error: "Invalid mobile payment return address." },
           { status: 400 }
         );
       }
 
-      callbackUrl =
-        `${origin}/payments/paystack/mobile-callback?returnUrl=${encodeURIComponent(returnUrl)}`;
+      let mobileReturnUrl: URL;
+
+      try {
+        mobileReturnUrl = new URL(returnUrl);
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid mobile payment return address." },
+          { status: 400 }
+        );
+      }
+
+      if (
+        mobileReturnUrl.protocol !== "tsc:" &&
+        mobileReturnUrl.protocol !== "exp:"
+      ) {
+        return NextResponse.json(
+          { error: "Unsupported mobile payment return address." },
+          { status: 400 }
+        );
+      }
+
+      // Paystack returns directly to the TSC app.
+      // No intermediate website callback page is used for mobile.
+      mobileReturnUrl.searchParams.set("reference", reference);
+      callbackUrl = mobileReturnUrl.toString();
     }
 
     const { error: insertError } = await admin
