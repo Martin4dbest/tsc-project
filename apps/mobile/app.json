@@ -38,7 +38,8 @@
         {
           "locationWhenInUsePermission": "Allow TSC to share your location during an active journey when you choose to enable GPS tracking."
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }

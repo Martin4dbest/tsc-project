@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { supabase } from "../../../lib/supabase";
 
 const API_URL = process.env.EXPO_PUBLIC_TSC_API_URL?.replace(/\/+$/, "");
@@ -139,7 +140,11 @@ export default function WalletFunding({
     const naira = Number(amount.trim().replace(/,/g, ""));
     const amountMinor = Math.round(naira * 100);
 
-    if (!Number.isFinite(naira) || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) {
+    if (
+      !Number.isFinite(naira) ||
+      !Number.isSafeInteger(amountMinor) ||
+      amountMinor <= 0
+    ) {
       showNotice("Enter a valid amount in naira.", "error");
       return;
     }
@@ -168,6 +173,8 @@ export default function WalletFunding({
         return;
       }
 
+      const redirectUrl = Linking.createURL("wallet-payment");
+
       const response = await fetch(
         `${API_URL}/api/payments/paystack/initialize`,
         {
@@ -176,7 +183,11 @@ export default function WalletFunding({
             "Content-Type": "application/json",
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ amountMinor, platform: "mobile" }),
+          body: JSON.stringify({
+            amountMinor,
+            platform: "mobile",
+            returnUrl: redirectUrl,
+          }),
         }
       );
 
@@ -192,16 +203,30 @@ export default function WalletFunding({
 
       pendingRef.current = result.reference;
       setPendingReference(result.reference);
+
       showNotice(
-        "Complete your payment in the secure Paystack checkout. Return to TSC afterwards.",
+        "Complete your payment securely. TSC will return here after checkout.",
         "info"
       );
 
-      await Linking.openURL(result.authorizationUrl);
+      const checkout = await WebBrowser.openAuthSessionAsync(
+        result.authorizationUrl,
+        redirectUrl
+      );
+
+      if (checkout.type === "success" && checkout.url) {
+        const returnedUrl = new URL(checkout.url);
+        const returnedReference =
+          returnedUrl.searchParams.get("reference");
+
+        if (returnedReference) {
+          await verifyPayment(returnedReference);
+        }
+      }
     } catch (error) {
       console.error("Mobile wallet funding failed:", error);
       showNotice(
-        "Unable to open Paystack checkout. Please try again.",
+        "Unable to open or complete Paystack checkout. Please try again.",
         "error"
       );
     } finally {

@@ -71,10 +71,24 @@ export async function POST(request: NextRequest) {
     const reference = `TSC-${Date.now()}-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     const origin = new URL(request.url).origin;
 
-    const callbackUrl =
-      platform === "mobile"
-        ? `${origin}/payments/paystack/mobile-callback?reference=${encodeURIComponent(reference)}`
-        : `${origin}/dashboard/wallet?payment_reference=${encodeURIComponent(reference)}`;
+    let callbackUrl = `${origin}/dashboard/wallet?payment_reference=${encodeURIComponent(reference)}`;
+
+    if (platform === "mobile") {
+      const returnUrl = body.returnUrl;
+
+      if (
+        typeof returnUrl !== "string" ||
+        (!/^exp:\/\//.test(returnUrl) && !/^tsc:\/\//.test(returnUrl))
+      ) {
+        return NextResponse.json(
+          { error: "Invalid mobile payment return address." },
+          { status: 400 }
+        );
+      }
+
+      callbackUrl =
+        `${origin}/payments/paystack/mobile-callback?returnUrl=${encodeURIComponent(returnUrl)}`;
+    }
 
     const { error: insertError } = await admin
       .from("tsc_payment_records")
