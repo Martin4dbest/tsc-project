@@ -111,7 +111,7 @@ export default async function TravellerWalletPage() {
               Traveller Financial Centre
             </span>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
+          <h1 className="text-lg font-extrabold tracking-tight text-slate-950 sm:text-lg">
             My Wallet
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500 sm:text-base">
@@ -130,7 +130,7 @@ export default async function TravellerWalletPage() {
 
       {walletError ? (
         <section className="rounded-3xl border border-red-200 bg-red-50 p-7">
-          <h2 className="text-xl font-bold text-red-900">Wallet temporarily unavailable</h2>
+          <h2 className="text-lg font-bold text-red-900">Wallet temporarily unavailable</h2>
           <p className="mt-2 text-sm leading-6 text-red-700">
             We could not load your wallet at the moment. Please refresh the page and try again.
           </p>
@@ -140,7 +140,7 @@ export default async function TravellerWalletPage() {
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
             <WalletIcon />
           </div>
-          <h2 className="mt-5 text-xl font-extrabold text-slate-900">
+          <h2 className="mt-5 text-lg font-extrabold text-slate-900">
             Your wallet is being prepared
           </h2>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
@@ -187,7 +187,7 @@ export default async function TravellerWalletPage() {
                 <p className="text-sm font-medium text-blue-100/75">
                   Available wallet balance
                 </p>
-                <h2 className="mt-3 break-words text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
+                <h2 className="mt-3 break-words text-lg font-extrabold tracking-tight sm:text-lg lg:text-xl">
                   {money(Number(wallet.balance_minor), wallet.currency_code)}
                 </h2>
                 <p className="mt-4 text-sm text-blue-100/65">
@@ -231,7 +231,7 @@ export default async function TravellerWalletPage() {
                     <ActivityIcon type="credit" />
                   </span>
                 </div>
-                <p className="mt-4 break-words text-2xl font-extrabold text-slate-950">
+                <p className="mt-4 break-words text-lg font-extrabold text-slate-950">
                   {money(totalCredits, wallet.currency_code)}
                 </p>
                 <p className="mt-1 text-xs text-slate-400">Credits in latest 50 records</p>
@@ -244,7 +244,7 @@ export default async function TravellerWalletPage() {
                     <ActivityIcon type="debit" />
                   </span>
                 </div>
-                <p className="mt-4 break-words text-2xl font-extrabold text-slate-950">
+                <p className="mt-4 break-words text-lg font-extrabold text-slate-950">
                   {money(totalDebits, wallet.currency_code)}
                 </p>
                 <p className="mt-1 text-xs text-slate-400">Debits in latest 50 records</p>
@@ -259,7 +259,7 @@ export default async function TravellerWalletPage() {
                     </svg>
                   </span>
                 </div>
-                <p className="mt-4 text-2xl font-extrabold text-slate-950">
+                <p className="mt-4 text-lg font-extrabold text-slate-950">
                   {activity.length}
                 </p>
                 <p className="mt-1 text-xs text-slate-400">Records displayed</p>
@@ -277,7 +277,7 @@ export default async function TravellerWalletPage() {
                     Account activity
                   </span>
                 </div>
-                <h2 className="mt-2 text-xl font-extrabold text-slate-950">
+                <h2 className="mt-2 text-lg font-extrabold text-slate-950">
                   Transaction history
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
