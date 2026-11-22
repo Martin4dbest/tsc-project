@@ -71,44 +71,12 @@ export async function POST(request: NextRequest) {
     const reference = `TSC-${Date.now()}-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     const origin = new URL(request.url).origin;
 
-    let callbackUrl = `${origin}/dashboard/wallet?payment_reference=${encodeURIComponent(reference)}`;
-
-    if (platform === "mobile") {
-      const returnUrl = body.returnUrl;
-
-      if (typeof returnUrl !== "string") {
-        return NextResponse.json(
-          { error: "Invalid mobile payment return address." },
-          { status: 400 }
-        );
-      }
-
-      let mobileReturnUrl: URL;
-
-      try {
-        mobileReturnUrl = new URL(returnUrl);
-      } catch {
-        return NextResponse.json(
-          { error: "Invalid mobile payment return address." },
-          { status: 400 }
-        );
-      }
-
-      if (
-        mobileReturnUrl.protocol !== "tsc:" &&
-        mobileReturnUrl.protocol !== "exp:"
-      ) {
-        return NextResponse.json(
-          { error: "Unsupported mobile payment return address." },
-          { status: 400 }
-        );
-      }
-
-      // Paystack returns directly to the TSC app.
-      // No intermediate website callback page is used for mobile.
-      mobileReturnUrl.searchParams.set("reference", reference);
-      callbackUrl = mobileReturnUrl.toString();
-    }
+    // Web payments retain their existing callback.
+    // Mobile payments use an HTTPS callback intercepted inside the TSC WebView.
+    const callbackUrl =
+      platform === "mobile"
+        ? `${origin}/payments/paystack/mobile-callback?reference=${encodeURIComponent(reference)}`
+        : `${origin}/dashboard/wallet?payment_reference=${encodeURIComponent(reference)}`;
 
     const { error: insertError } = await admin
       .from("tsc_payment_records")
@@ -136,14 +104,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const secretKey = getPaystackSecretKey();
-
     const paystackResponse = await fetch(
       "https://api.paystack.co/transaction/initialize",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${secretKey}`,
+          Authorization: `Bearer ${getPaystackSecretKey()}`,
           "Content-Type": "application/json",
           Accept: "application/json",
         },
@@ -178,7 +144,11 @@ export async function POST(request: NextRequest) {
         .eq("status", "pending");
 
       return NextResponse.json(
-        { error: result.message || "Paystack could not initialise this payment." },
+        {
+          error:
+            result.message ||
+            "Paystack could not initialise this payment.",
+        },
         { status: 502 }
       );
     }
@@ -186,6 +156,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       authorizationUrl: result.data.authorization_url,
       reference,
+      ...(platform === "mobile" ? { callbackUrl } : {}),
     });
   } catch (error) {
     console.error("Paystack initialization error:", error);

@@ -9,8 +9,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import * as Linking from "expo-linking";
-import * as WebBrowser from "expo-web-browser";
 import { supabase } from "../../../lib/supabase";
 
 const API_URL = process.env.EXPO_PUBLIC_TSC_API_URL?.replace(/\/+$/, "");
@@ -30,9 +28,8 @@ type Props = {
 
 export default function WalletFunding({ walletActive }: Props) {
   const router = useRouter();
-  const [amount, setAmount] = useState("5000");
+  const [amount, setAmount] = useState("");
   const [funding, setFunding] = useState(false);
-  const [pendingReference, setPendingReference] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeType, setNoticeType] = useState<"success" | "error" | "info">(
     "info"
@@ -44,13 +41,6 @@ export default function WalletFunding({ walletActive }: Props) {
   ) => {
     setNotice(message);
     setNoticeType(type);
-  };
-
-  const openVerification = (reference: string) => {
-    router.push({
-      pathname: "/wallet-payment",
-      params: { reference },
-    });
   };
 
   const startFunding = async () => {
@@ -90,8 +80,6 @@ export default function WalletFunding({ walletActive }: Props) {
         return;
       }
 
-      const redirectUrl = Linking.createURL("wallet-payment");
-
       const response = await fetch(
         `${API_URL}/api/payments/paystack/initialize`,
         {
@@ -103,14 +91,18 @@ export default function WalletFunding({ walletActive }: Props) {
           body: JSON.stringify({
             amountMinor,
             platform: "mobile",
-            returnUrl: redirectUrl,
           }),
         }
       );
 
       const result = await response.json();
 
-      if (!response.ok || !result.authorizationUrl || !result.reference) {
+      if (
+        !response.ok ||
+        !result.authorizationUrl ||
+        !result.reference ||
+        !result.callbackUrl
+      ) {
         showNotice(
           result.error || "Unable to start payment. Please try again.",
           "error"
@@ -118,38 +110,18 @@ export default function WalletFunding({ walletActive }: Props) {
         return;
       }
 
-      setPendingReference(result.reference);
-      showNotice("Paystack checkout is opening securely inside TSC.", "info");
-
-      const checkout = await WebBrowser.openAuthSessionAsync(
-        result.authorizationUrl,
-        redirectUrl
-      );
-
-      if (checkout.type === "success" && checkout.url) {
-        const returnedUrl = new URL(checkout.url);
-        const returnedReference =
-          returnedUrl.searchParams.get("reference");
-
-        if (returnedReference) {
-          setPendingReference("");
-          openVerification(returnedReference);
-          return;
-        }
-      }
-
-      // Expo Router may already have received the deep link on Android.
-      // Keep the reference available in case the customer needs to verify manually.
-      if (checkout.type === "cancel" || checkout.type === "dismiss") {
-        showNotice(
-          "Checkout was closed. If you completed payment, check its status below.",
-          "info"
-        );
-      }
+      router.push({
+        pathname: "/wallet-payment",
+        params: {
+          reference: result.reference,
+          checkoutUrl: result.authorizationUrl,
+          callbackUrl: result.callbackUrl,
+        },
+      });
     } catch (error) {
       console.error("Mobile wallet funding failed:", error);
       showNotice(
-        "Unable to open or complete Paystack checkout. Please try again.",
+        "Unable to start payment. Please check your connection and try again.",
         "error"
       );
     } finally {
@@ -253,16 +225,6 @@ export default function WalletFunding({ walletActive }: Props) {
           />
           <Text style={styles.noticeText}>{notice}</Text>
         </View>
-      ) : null}
-
-      {pendingReference ? (
-        <Pressable
-          onPress={() => openVerification(pendingReference)}
-          style={styles.checkButton}
-        >
-          <Ionicons name="refresh-outline" size={17} color={TEAL} />
-          <Text style={styles.checkButtonText}>Check payment status</Text>
-        </Pressable>
       ) : null}
 
       <View style={styles.footer}>
@@ -399,19 +361,6 @@ const styles = StyleSheet.create({
     color: INK,
     fontSize: 11,
     lineHeight: 17,
-  },
-  checkButton: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 12,
-    padding: 10,
-  },
-  checkButtonText: {
-    color: TEAL,
-    fontSize: 12,
-    fontWeight: "900",
   },
   footer: {
     flexDirection: "row",

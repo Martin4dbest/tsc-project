@@ -1,30 +1,25 @@
 "use client";
 
-import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 export default function MobilePaymentCallbackPage() {
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const reference = params.get("reference");
-    const returnUrl = params.get("returnUrl");
-
-    if (!reference || !returnUrl) return;
-
-    if (!/^exp:\/\//.test(returnUrl) && !/^tsc:\/\//.test(returnUrl)) {
-      return;
-    }
-
-    const destination = new URL(returnUrl);
-    destination.searchParams.set("reference", reference);
-
-    window.location.replace(destination.toString());
-  }, []);
+  const params = useSearchParams();
+  const reference = params.get("reference");
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
-      <p className="text-lg font-semibold">
-        Returning to TSC payment verification...
+    <main className="min-h-screen flex flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-2xl">
+        ✓
+      </div>
+      <h1 className="text-xl font-bold">Payment received</h1>
+      <p className="text-sm text-gray-600">
+        Return to TSC to confirm your wallet funding.
       </p>
+      {reference ? (
+        <p className="text-xs text-gray-400 break-all">
+          Reference: {reference}
+        </p>
+      ) : null}
     </main>
   );
 }
