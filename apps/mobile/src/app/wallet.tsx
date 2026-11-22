@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
+import WalletFunding from "../components/wallet/wallet-funding";
 
 type Wallet = {
   id: string;
@@ -263,6 +264,8 @@ export default function WalletScreen() {
                   </Text>
                 </View>
               </View>
+
+              <WalletFunding walletActive={wallet.status === "active"} onWalletUpdated={() => void loadWallet(true)} />
 
               <View style={styles.summaryHeading}>
                 <Text style={styles.sectionTitle}>Wallet overview</Text>

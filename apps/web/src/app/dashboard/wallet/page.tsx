@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import WalletFunding from "@/components/wallet/wallet-funding";
 
 export const metadata = {
   title: "My Wallet | TSC",
@@ -127,6 +128,10 @@ export default async function TravellerWalletPage() {
           Back to dashboard
         </Link>
       </header>
+
+      {wallet && (
+        <WalletFunding walletActive={wallet.status === "active"} />
+      )}
 
       {walletError ? (
         <section className="rounded-3xl border border-red-200 bg-red-50 p-7">

@@ -107,12 +107,12 @@ export default async function AdminDashboard() {
     {
       title: "Payment Operations",
       description: "Monitor payment records, payment history and transaction activities.",
-      href: null,
+      href: "/admin/payments",
       icon: "₦",
       color: "purple",
       label: "Financial operations",
       available: paymentAccess.authorized,
-      status: "Coming soon",
+      status: "Open module",
     },
     {
       title: "Emergency Operations",
