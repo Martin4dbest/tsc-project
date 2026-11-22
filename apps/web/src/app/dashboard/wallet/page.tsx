@@ -187,7 +187,7 @@ export default async function TravellerWalletPage() {
                 <p className="text-sm font-medium text-blue-100/75">
                   Available wallet balance
                 </p>
-                <h2 className="mt-3 break-words text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
+                <h2 className="mt-3 break-words text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
                   {money(Number(wallet.balance_minor), wallet.currency_code)}
                 </h2>
                 <p className="mt-4 text-sm text-blue-100/65">
