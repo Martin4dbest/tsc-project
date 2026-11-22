@@ -143,10 +143,8 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
       }
 
       if (profile.role === 'admin' || profile.role === 'super_admin') {
-        await supabase.auth.signOut();
-        throw new Error(
-          'This is an administrator account. Please use the TSC web administration portal.'
-        );
+        router.replace('/admin/payments');
+        return;
       }
 
       if (profile.role !== 'traveller') {
@@ -196,7 +194,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
 
           <View style={styles.card}>
             <Text style={styles.eyebrow}>
-              {isRegister ? 'JOIN TSC' : 'TRAVELLER ACCESS'}
+              {isRegister ? 'JOIN TSC' : 'TRAVELLER / ADMIN ACCESS'}
             </Text>
 
             <Text style={styles.heading}>
@@ -206,7 +204,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
             <Text style={styles.description}>
               {isRegister
                 ? 'Register to manage your journeys and access travel safety services.'
-                : 'Sign in to manage your journeys and travel safety.'}
+                : 'Sign in to access your TSC account and authorised services.'}
             </Text>
 
             {error ? (

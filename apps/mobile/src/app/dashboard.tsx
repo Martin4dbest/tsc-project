@@ -17,34 +17,34 @@ import { supabase } from '../../lib/supabase';
 
 type Profile = {
   full_name: string | null;
-  role: string | null;
-  account_status: string | null;
+  role: string;
+  account_status: string;
 };
 
 const DARK_COLORS = {
-  background: '#111318',
-  surface: '#1A1D24',
-  surfaceCard: '#222630',
-  border: '#2C313C',
-  textPrimary: '#F3F4F6',
-  textSecondary: '#9CA3AF',
-  textMuted: '#6B7280',
-  accent: '#F97316',
-  accentLight: '#FB923C',
-  success: '#10B981',
+  background: '#071D49',
+  surface: '#102D50',
+  surfaceCard: '#15375E',
+  border: '#29496F',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#D0DAEC',
+  textMuted: '#AFC1DD',
+  accent: '#FF9B26',
+  accentLight: '#FFB45C',
+  success: '#34D399',
 };
 
 const LIGHT_COLORS = {
-  background: '#F8FAFC',
+  background: '#F4F7FB',
   surface: '#FFFFFF',
-  surfaceCard: '#F1F5F9',
-  border: '#E2E8F0',
-  textPrimary: '#0F172A',
-  textSecondary: '#475569',
-  textMuted: '#64748B',
-  accent: '#EA580C',
-  accentLight: '#F97316',
-  success: '#059669',
+  surfaceCard: '#EDF3FA',
+  border: '#D7E1ED',
+  textPrimary: '#102D50',
+  textSecondary: '#52677F',
+  textMuted: '#718096',
+  accent: '#D87500',
+  accentLight: '#D87500',
+  success: '#15803D',
 };
 
 const services = [
@@ -52,33 +52,17 @@ const services = [
     id: 'journey',
     icon: '✈',
     title: 'Journey Management',
-    subtitle: 'Plan and manage your trips',
-    color: '#F97316',
-    image: 'photo-1436491865332-7a61a109cc05',
-  },
-  {
-    id: 'wallet',
-    icon: '◈',
-    title: 'Wallet Management',
-    subtitle: 'Balance and transactions',
-    color: '#14B8A6',
-    image: 'photo-1554224155-6726b3ff858f',
-  },
-  {
-    id: 'payments',
-    icon: '⇄',
-    title: 'Payments',
-    subtitle: 'Secure travel payments',
-    color: '#3B82F6',
-    image: 'photo-1556742049-0cfed4f6a45d',
+    subtitle: 'Plan and manage your journeys',
+    color: '#F59E0B',
+    image: 'photo-1488646953014-85cb44e25828',
   },
   {
     id: 'safety',
     icon: '🛡',
-    title: 'Safety Protection',
-    subtitle: 'Protection throughout your trip',
-    color: '#F59E0B',
-    image: 'photo-1519681393784-d120267933ba',
+    title: 'Travel Safety',
+    subtitle: 'Stay informed and protected',
+    color: '#10B981',
+    image: 'photo-1516026672322-bc52d61a55d5',
   },
   {
     id: 'tracking',
@@ -167,9 +151,19 @@ export default function DashboardScreen() {
       if (
         profileError ||
         !data ||
-        data.role !== 'traveller' ||
         data.account_status !== 'active'
       ) {
+        await supabase.auth.signOut();
+        router.replace('/login');
+        return;
+      }
+
+      if (data.role === 'admin' || data.role === 'super_admin') {
+        router.replace('/admin/payments');
+        return;
+      }
+
+      if (data.role !== 'traveller') {
         await supabase.auth.signOut();
         router.replace('/login');
         return;
@@ -269,7 +263,6 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* HEADER */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <View style={styles.brand}>
             <View
@@ -343,7 +336,6 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* WELCOME BANNER */}
         <View
           style={[
             styles.welcomeSection,
@@ -401,7 +393,6 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ACCOUNT STATUS */}
         <View
           style={[
             styles.statusBar,
@@ -425,7 +416,6 @@ export default function DashboardScreen() {
           </Text>
         </View>
 
-        {/* QUICK OVERVIEW */}
         <View style={styles.sectionHeading}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
             Overview
@@ -487,7 +477,6 @@ export default function DashboardScreen() {
           </View>
         </Pressable>
 
-        {/* SERVICES */}
         <View style={styles.sectionHeading}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
             Services
@@ -548,17 +537,11 @@ export default function DashboardScreen() {
                     </View>
 
                     <View style={styles.serviceTextBlock}>
-                      <Text
-                        style={styles.serviceTitle}
-                        numberOfLines={2}
-                      >
+                      <Text style={styles.serviceTitle} numberOfLines={2}>
                         {service.title}
                       </Text>
 
-                      <Text
-                        style={styles.serviceSubtitle}
-                        numberOfLines={2}
-                      >
+                      <Text style={styles.serviceSubtitle} numberOfLines={2}>
                         {service.subtitle}
                       </Text>
                     </View>
@@ -593,7 +576,6 @@ export default function DashboardScreen() {
           })}
         </View>
 
-        {/* SAFETY NOTICE */}
         <View
           style={[
             styles.safetyCard,
@@ -630,7 +612,6 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ERROR STATE */}
         {!!error && (
           <View style={styles.errorCard}>
             <Text style={styles.errorText}>{error}</Text>
@@ -645,7 +626,6 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* FOOTER */}
         <View style={styles.footer}>
           <Text style={[styles.footerBrand, { color: colors.accent }]}>
             TSC
@@ -663,13 +643,8 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
+  screen: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
   loadingScreen: {
     flex: 1,
     alignItems: 'center',
@@ -684,15 +659,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 6,
   },
-  logoImage: {
-    width: '100%',
-    height: '100%',
-  },
-  loadingText: {
-    fontSize: 13,
-    marginTop: 12,
-    fontWeight: '500',
-  },
+  logoImage: { width: '100%', height: '100%' },
+  loadingText: { fontSize: 13, marginTop: 12, fontWeight: '500' },
   header: {
     height: 64,
     flexDirection: 'row',
@@ -701,27 +669,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     marginBottom: 20,
   },
-  brand: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  brandName: {
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-  },
-  brandCaption: {
-    fontSize: 9,
-    fontWeight: '600',
-    letterSpacing: 1,
-    marginTop: 1,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandName: { fontSize: 16, fontWeight: '800', letterSpacing: 1.2 },
+  brandCaption: { fontSize: 9, fontWeight: '600', letterSpacing: 1, marginTop: 1 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   iconButton: {
     width: 38,
     height: 38,
@@ -730,26 +681,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconButtonText: {
-    fontSize: 16,
-  },
+  iconButtonText: { fontSize: 16 },
   signOutButton: {
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderWidth: 1,
     borderRadius: 20,
   },
-  signOutText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  pressed: {
-    opacity: 0.75,
-  },
-  pressedCard: {
-    opacity: 0.9,
-    transform: [{ scale: 0.985 }],
-  },
+  signOutText: { fontSize: 12, fontWeight: '600' },
+  pressed: { opacity: 0.75 },
+  pressedCard: { opacity: 0.9, transform: [{ scale: 0.985 }] },
   welcomeSection: {
     minHeight: 130,
     borderRadius: 20,
@@ -759,28 +700,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  welcomeText: {
-    flex: 1,
-    paddingRight: 10,
-  },
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    marginBottom: 4,
-  },
-  greeting: {
-    fontSize: 13,
-  },
-  userName: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  welcomeSubtext: {
-    fontSize: 12,
-    marginTop: 6,
-  },
+  welcomeText: { flex: 1, paddingRight: 10 },
+  eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4 },
+  greeting: { fontSize: 13 },
+  userName: { fontSize: 20, fontWeight: '700', marginTop: 2 },
+  welcomeSubtext: { fontSize: 12, marginTop: 6 },
   globeCircle: {
     width: 72,
     height: 72,
@@ -790,10 +714,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-  globeIcon: {
-    fontSize: 40,
-    fontWeight: '300',
-  },
+  globeIcon: { fontSize: 40, fontWeight: '300' },
   globeDot: {
     width: 10,
     height: 10,
@@ -813,26 +734,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderWidth: 1,
   },
-  statusLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  onlineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  statusRight: {
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.7,
-  },
+  statusLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  onlineDot: { width: 8, height: 8, borderRadius: 4 },
+  statusLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  statusRight: { fontSize: 10, fontWeight: '600', letterSpacing: 0.7 },
   sectionHeading: {
     marginTop: 24,
     marginBottom: 12,
@@ -840,15 +745,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  sectionHint: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
+  sectionTitle: { fontSize: 16, fontWeight: '700' },
+  sectionHint: { fontSize: 9, fontWeight: '700', letterSpacing: 1 },
   overviewCard: {
     minHeight: 72,
     borderRadius: 16,
@@ -866,20 +764,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 14,
   },
-  overviewIconText: {
-    fontSize: 20,
-  },
-  overviewDetails: {
-    flex: 1,
-  },
-  overviewTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  overviewDescription: {
-    fontSize: 12,
-    marginTop: 2,
-  },
+  overviewIconText: { fontSize: 20 },
+  overviewDetails: { flex: 1 },
+  overviewTitle: { fontSize: 14, fontWeight: '700' },
+  overviewDescription: { fontSize: 12, marginTop: 2 },
   overviewArrow: {
     width: 28,
     height: 28,
@@ -887,16 +775,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  arrowText: {
-    fontSize: 18,
-    lineHeight: 20,
-    fontWeight: '600',
-  },
-  serviceGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
+  arrowText: { fontSize: 18, lineHeight: 20, fontWeight: '600' },
+  serviceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   serviceCard: {
     minHeight: 174,
     borderRadius: 17,
@@ -904,14 +784,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#202631',
   },
-  serviceImage: {
-    flex: 1,
-    minHeight: 174,
-    justifyContent: 'flex-end',
-  },
-  serviceImageBackground: {
-    borderRadius: 15,
-  },
+  serviceImage: { flex: 1, minHeight: 174, justifyContent: 'flex-end' },
+  serviceImageBackground: { borderRadius: 15 },
   serviceImageOverlay: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(8, 15, 28, 0.68)',
@@ -931,47 +805,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 9,
   },
-  serviceIconText: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  serviceTextBlock: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  serviceTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '800',
-  },
-  serviceSubtitle: {
-    color: '#E5E7EB',
-    fontSize: 10,
-    lineHeight: 15,
-    marginTop: 4,
-  },
-  serviceFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 10,
-    gap: 6,
-  },
-  serviceDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-  serviceStatus: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  serviceArrow: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    lineHeight: 18,
-    marginLeft: 'auto',
-  },
+  serviceIconText: { fontSize: 18, fontWeight: '700' },
+  serviceTextBlock: { flex: 1, justifyContent: 'center' },
+  serviceTitle: { color: '#FFFFFF', fontSize: 13, lineHeight: 18, fontWeight: '800' },
+  serviceSubtitle: { color: '#E5E7EB', fontSize: 10, lineHeight: 15, marginTop: 4 },
+  serviceFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 6 },
+  serviceDot: { width: 7, height: 7, borderRadius: 4 },
+  serviceStatus: { fontSize: 10, fontWeight: '700' },
+  serviceArrow: { color: '#FFFFFF', fontSize: 18, lineHeight: 18, marginLeft: 'auto' },
   safetyCard: {
     marginTop: 20,
     borderRadius: 16,
@@ -988,22 +829,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 14,
   },
-  safetyIconText: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  safetyContent: {
-    flex: 1,
-  },
-  safetyTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  safetyDescription: {
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 2,
-  },
+  safetyIconText: { fontSize: 16, fontWeight: '800' },
+  safetyContent: { flex: 1 },
+  safetyTitle: { fontSize: 13, fontWeight: '700' },
+  safetyDescription: { fontSize: 11, lineHeight: 16, marginTop: 2 },
   errorCard: {
     marginTop: 16,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -1012,33 +841,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
   },
-  errorText: {
-    color: '#EF4444',
-    fontSize: 12,
-  },
-  retryText: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  footer: {
-    alignItems: 'center',
-    paddingTop: 36,
-    paddingBottom: 10,
-  },
-  footerBrand: {
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 2,
-  },
-  footerText: {
-    fontSize: 9,
-    letterSpacing: 1.5,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  footerCopyright: {
-    fontSize: 10,
-    marginTop: 6,
-  },
+  errorText: { color: '#EF4444', fontSize: 12 },
+  retryText: { fontSize: 12, fontWeight: '700', marginTop: 6 },
+  footer: { alignItems: 'center', paddingTop: 36, paddingBottom: 10 },
+  footerBrand: { fontSize: 15, fontWeight: '900', letterSpacing: 2 },
+  footerText: { fontSize: 9, letterSpacing: 1.5, fontWeight: '600', marginTop: 4 },
+  footerCopyright: { fontSize: 10, marginTop: 6 },
 });
