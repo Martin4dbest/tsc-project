@@ -1,25 +1,16 @@
-"use client";
-
-import { useSearchParams } from "next/navigation";
-
 export default function MobilePaymentCallbackPage() {
-  const params = useSearchParams();
-  const reference = params.get("reference");
-
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-3 p-6 text-center">
-      <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-2xl">
-        ✓
-      </div>
-      <h1 className="text-xl font-bold">Payment received</h1>
-      <p className="text-sm text-gray-600">
-        Return to TSC to confirm your wallet funding.
-      </p>
-      {reference ? (
-        <p className="text-xs text-gray-400 break-all">
-          Reference: {reference}
+    <main className="flex min-h-screen items-center justify-center p-6">
+      <div className="w-full max-w-md text-center">
+        <h1 className="text-2xl font-bold text-slate-900">
+          Payment received
+        </h1>
+
+        <p className="mt-3 text-slate-600">
+          Your payment has been received. Return to TSC while we confirm
+          your wallet funding.
         </p>
-      ) : null}
+      </div>
     </main>
   );
 }
