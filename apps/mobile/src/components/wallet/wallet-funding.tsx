@@ -176,7 +176,7 @@ export default function WalletFunding({
             "Content-Type": "application/json",
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ amountMinor }),
+          body: JSON.stringify({ amountMinor, platform: "mobile" }),
         }
       );
 

@@ -4,7 +4,6 @@ import { getPaymentRequestUser } from "@/lib/payments/request-user";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getPaystackSecretKey } from "@/lib/payments/paystack";
 
-
 export async function POST(request: NextRequest) {
   try {
     const user = await getPaymentRequestUser(request);
@@ -18,11 +17,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const amountMinor = Number(body.amountMinor);
+    const platform = body.platform === "mobile" ? "mobile" : "web";
 
-    if (
-      !Number.isSafeInteger(amountMinor) ||
-      amountMinor <= 0
-    ) {
+    if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) {
       return NextResponse.json(
         { error: "Enter a valid wallet funding amount." },
         { status: 400 }
@@ -73,7 +70,11 @@ export async function POST(request: NextRequest) {
 
     const reference = `TSC-${Date.now()}-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     const origin = new URL(request.url).origin;
-    const callbackUrl = `${origin}/dashboard/wallet?payment_reference=${encodeURIComponent(reference)}`;
+
+    const callbackUrl =
+      platform === "mobile"
+        ? `${origin}/payments/paystack/mobile-callback?reference=${encodeURIComponent(reference)}`
+        : `${origin}/dashboard/wallet?payment_reference=${encodeURIComponent(reference)}`;
 
     const { error: insertError } = await admin
       .from("tsc_payment_records")
@@ -89,6 +90,7 @@ export async function POST(request: NextRequest) {
         description: "Wallet funding via Paystack",
         metadata: {
           source: "traveller_wallet",
+          platform,
         },
       });
 
@@ -121,6 +123,7 @@ export async function POST(request: NextRequest) {
             traveller_id: user.id,
             purpose: "wallet_funding",
             platform: "TSC",
+            client: platform,
           },
         }),
         cache: "no-store",
