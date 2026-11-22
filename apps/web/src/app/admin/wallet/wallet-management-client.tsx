@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
 type WalletRow = {
   id: string;
@@ -79,10 +80,58 @@ export default function WalletManagementClient({
   canManage,
   adjustAction,
 }: Props) {
+  const router = useRouter();
+
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [selected, setSelected] = useState<WalletRow | null>(null);
   const [direction, setDirection] = useState<"credit" | "debit">("credit");
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState<{
+    direction: "credit" | "debit";
+    amount: number;
+    currency: string;
+    traveller: string;
+  } | null>(null);
+  const [adjustmentError, setAdjustmentError] = useState("");
+
+  async function handleAdjustmentSubmit(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const amount = Number(formData.get("amount"));
+    const type = direction;
+    const currency = selected?.currency_code || "NGN";
+    const traveller = selected?.profile?.full_name || "Traveller";
+
+    setSubmitting(true);
+    setAdjustmentError("");
+
+    try {
+      await adjustAction(formData);
+
+      setSelected(null);
+      setSuccess({
+        direction: type,
+        amount,
+        currency,
+        traveller,
+      });
+
+      router.refresh();
+    } catch (error) {
+      setAdjustmentError(
+        error instanceof Error
+          ? error.message
+          : "Wallet adjustment failed. Please try again."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -444,6 +493,7 @@ export default function WalletManagementClient({
                           onClick={() => {
                             setSelected(wallet);
                             setDirection("credit");
+                            setAdjustmentError("");
                           }}
                           style={{
                             ...buttonBase,
@@ -655,7 +705,9 @@ export default function WalletManagementClient({
           aria-modal="true"
           aria-labelledby="wallet-modal-title"
           onClick={(event) => {
-            if (event.target === event.currentTarget) setSelected(null);
+            if (event.target === event.currentTarget && !submitting) {
+              setSelected(null);
+            }
           }}
           style={{
             position: "fixed",
@@ -720,6 +772,7 @@ export default function WalletManagementClient({
                 <button
                   type="button"
                   aria-label="Close modal"
+                  disabled={submitting}
                   onClick={() => setSelected(null)}
                   style={{
                     background: "rgba(255,255,255,.12)",
@@ -728,7 +781,7 @@ export default function WalletManagementClient({
                     width: 34,
                     height: 34,
                     borderRadius: 10,
-                    cursor: "pointer",
+                    cursor: submitting ? "not-allowed" : "pointer",
                     fontSize: 20,
                   }}
                 >
@@ -761,7 +814,7 @@ export default function WalletManagementClient({
             </div>
 
             <form
-              action={adjustAction}
+              onSubmit={handleAdjustmentSubmit}
               style={{ padding: 22, display: "grid", gap: 14 }}
             >
               <input
@@ -794,6 +847,7 @@ export default function WalletManagementClient({
                     <button
                       key={type}
                       type="button"
+                      disabled={submitting}
                       onClick={() => setDirection(type)}
                       style={{
                         ...buttonBase,
@@ -810,6 +864,7 @@ export default function WalletManagementClient({
                               : "#fff0f0"
                             : "#fff",
                         color: type === "credit" ? "#17834c" : "#bd4141",
+                        opacity: submitting ? 0.6 : 1,
                       }}
                     >
                       {type === "credit" ? "＋ Credit" : "− Debit"}
@@ -840,6 +895,7 @@ export default function WalletManagementClient({
                   min="0.01"
                   step="0.01"
                   required
+                  disabled={submitting}
                   placeholder="0.00"
                   style={{
                     width: "100%",
@@ -870,6 +926,7 @@ export default function WalletManagementClient({
                   name="reason"
                   minLength={5}
                   required
+                  disabled={submitting}
                   rows={3}
                   placeholder="Explain why this adjustment is being made…"
                   style={{
@@ -884,17 +941,40 @@ export default function WalletManagementClient({
                 />
               </div>
 
+              {adjustmentError && (
+                <div
+                  role="alert"
+                  style={{
+                    background: "#fff1f1",
+                    border: "1px solid #fecaca",
+                    color: "#b42318",
+                    padding: 13,
+                    borderRadius: 12,
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  {adjustmentError}
+                </div>
+              )}
+
               <div style={{ display: "flex", gap: 10 }}>
                 <button
                   type="button"
+                  disabled={submitting}
                   onClick={() => setSelected(null)}
-                  style={{ ...buttonBase, flex: 1 }}
+                  style={{
+                    ...buttonBase,
+                    flex: 1,
+                    opacity: submitting ? 0.6 : 1,
+                  }}
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
+                  disabled={submitting}
                   style={{
                     flex: 1,
                     padding: 12,
@@ -903,13 +983,139 @@ export default function WalletManagementClient({
                     background: "#173653",
                     color: "#fff",
                     fontWeight: 800,
-                    cursor: "pointer",
+                    cursor: submitting ? "not-allowed" : "pointer",
+                    opacity: submitting ? 0.7 : 1,
                   }}
                 >
-                  Confirm {direction}
+                  {submitting ? "Processing..." : `Confirm ${direction}`}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* SUCCESS POPUP */}
+      {success && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="wallet-success-title"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2000,
+            background: "rgba(9, 25, 45, .68)",
+            backdropFilter: "blur(7px)",
+            display: "grid",
+            placeItems: "center",
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 390,
+              background: "#fff",
+              borderRadius: 25,
+              padding: "34px 25px",
+              textAlign: "center",
+              boxShadow: "0 25px 80px rgba(0,0,0,.25)",
+            }}
+          >
+            <div
+              style={{
+                width: 76,
+                height: 76,
+                borderRadius: "50%",
+                background: "#e8f8ef",
+                color: "#159653",
+                display: "grid",
+                placeItems: "center",
+                margin: "0 auto 20px",
+                fontSize: 39,
+                fontWeight: 800,
+              }}
+            >
+              ✓
+            </div>
+
+            <div
+              style={{
+                color: "#e98012",
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: 1.5,
+              }}
+            >
+              TSC WALLET CONFIRMATION
+            </div>
+
+            <h2
+              id="wallet-success-title"
+              style={{
+                color: "#10254b",
+                fontSize: 23,
+                fontWeight: 900,
+                margin: "10px 0",
+              }}
+            >
+              Wallet updated successfully!
+            </h2>
+
+            <p style={{ color: "#64748b", fontSize: 14, lineHeight: 1.6 }}>
+              The wallet adjustment has been completed successfully.
+            </p>
+
+            <div
+              style={{
+                background: "#f4f7fb",
+                borderRadius: 16,
+                padding: 18,
+                margin: "22px 0",
+              }}
+            >
+              <div style={{ color: "#718096", fontSize: 12 }}>
+                Amount {success.direction === "credit" ? "credited" : "debited"}
+              </div>
+
+              <div
+                style={{
+                  color: success.direction === "credit" ? "#159653" : "#dc4545",
+                  fontSize: 28,
+                  fontWeight: 900,
+                  marginTop: 7,
+                }}
+              >
+                {success.direction === "credit" ? "+" : "−"}
+                {money(
+                  Math.round(success.amount * 100),
+                  success.currency
+                )}
+              </div>
+
+              <div style={{ color: "#64748b", fontSize: 12, marginTop: 9 }}>
+                Traveller: {success.traveller}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSuccess(null)}
+              style={{
+                width: "100%",
+                border: 0,
+                borderRadius: 13,
+                padding: 15,
+                background: "#10254b",
+                color: "#fff",
+                fontWeight: 800,
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
+              Done
+            </button>
           </div>
         </div>
       )}
