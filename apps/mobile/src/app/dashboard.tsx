@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  ImageBackground,
   Platform,
   Pressable,
   RefreshControl,
@@ -24,138 +23,169 @@ type Profile = {
   account_status: string;
 };
 
-type ServiceItem = {
+type QuickAction = {
   id: string;
-  iconName: keyof typeof Ionicons.glyphMap;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  route: string;
+  tint: string;
+  bg: string;
+};
+
+type GridModule = {
+  id: string;
   title: string;
   subtitle: string;
+  tag: string;
+  icon: keyof typeof Ionicons.glyphMap;
   color: string;
-  image: string;
-  route?: string;
+  softBg: string;
+  route: string;
 };
 
-const DARK_COLORS = {
-  background: '#061533',
-  surface: '#0D234A',
-  surfaceElevated: '#132F61',
-  surfaceCard: '#17376E',
-  border: 'rgba(148, 184, 235, 0.16)',
-  borderStrong: 'rgba(148, 184, 235, 0.28)',
-  textPrimary: '#F8FAFC',
-  textSecondary: '#CBD5E1',
-  textMuted: '#8FA6C9',
-  accent: '#FF9B26',
-  accentSoft: 'rgba(255, 155, 38, 0.14)',
-  accentLight: '#FFB45C',
+type UpcomingModule = {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+};
+
+const LIGHT_PALETTE = {
+  canvas: '#F3F6FA',
+  card: '#FFFFFF',
+  cardMuted: '#F8FAFC',
+  border: '#E5EAF2',
+  textPrimary: '#0B192C',
+  textSecondary: '#4A5B73',
+  textMuted: '#7C8BA1',
+  heroBg: '#091B3A',
+  heroSurface: 'rgba(255, 255, 255, 0.08)',
+  heroBorder: 'rgba(255, 255, 255, 0.14)',
+  accent: '#F59E0B',
+  accentDeep: '#D97706',
   success: '#10B981',
-  successSoft: 'rgba(16, 185, 129, 0.14)',
   danger: '#EF4444',
-  dangerSoft: 'rgba(239, 68, 68, 0.16)',
 };
 
-const LIGHT_COLORS = {
-  background: '#F1F5F9',
-  surface: '#FFFFFF',
-  surfaceElevated: '#F8FAFC',
-  surfaceCard: '#E2E8F0',
-  border: '#E2E8F0',
-  borderStrong: '#CBD5E1',
-  textPrimary: '#0F172A',
-  textSecondary: '#475569',
-  textMuted: '#64748B',
-  accent: '#D97706',
-  accentSoft: '#FEF3C7',
-  accentLight: '#B45309',
-  success: '#059669',
-  successSoft: '#D1FAE5',
-  danger: '#DC2626',
-  dangerSoft: '#FEE2E2',
+const DARK_PALETTE = {
+  canvas: '#050E21',
+  card: '#0C1B38',
+  cardMuted: '#102347',
+  border: '#192E57',
+  textPrimary: '#F8FAFC',
+  textSecondary: '#B8C6DC',
+  textMuted: '#6E83A6',
+  heroBg: '#0E244D',
+  heroSurface: 'rgba(255, 255, 255, 0.07)',
+  heroBorder: 'rgba(255, 255, 255, 0.12)',
+  accent: '#FFB020',
+  accentDeep: '#F59E0B',
+  success: '#34D399',
+  danger: '#F87171',
 };
 
-const SERVICES: ServiceItem[] = [
+const DOCK_ACTIONS: QuickAction[] = [
   {
     id: 'journey',
-    iconName: 'airplane-outline',
-    title: 'Journey Management',
-    subtitle: 'Plan, log & monitor active trips',
-    color: '#F59E0B',
-    image: 'photo-1488646953014-85cb44e25828',
+    label: 'Journeys',
+    icon: 'airplane',
+    route: '/journeys',
+    tint: '#FBBF24',
+    bg: 'rgba(251, 191, 36, 0.16)',
+  },
+  {
+    id: 'wallet',
+    label: 'Wallet',
+    icon: 'wallet',
+    route: '/wallet',
+    tint: '#34D399',
+    bg: 'rgba(52, 211, 153, 0.16)',
+  },
+  {
+    id: 'tracking',
+    label: 'Live GPS',
+    icon: 'navigate',
+    route: '/gps-tracking',
+    tint: '#38BDF8',
+    bg: 'rgba(56, 189, 248, 0.16)',
+  },
+  {
+    id: 'emergency',
+    label: 'SOS Help',
+    icon: 'alert-circle',
+    route: '/emergency',
+    tint: '#FB7185',
+    bg: 'rgba(251, 113, 133, 0.18)',
+  },
+];
+
+const CORE_MODULES: GridModule[] = [
+  {
+    id: 'journey',
+    title: 'Journey Manager',
+    subtitle: 'Plan trips & manage active routes',
+    tag: 'Trips',
+    icon: 'map-outline',
+    color: '#D97706',
+    softBg: 'rgba(245, 158, 11, 0.12)',
     route: '/journeys',
   },
   {
     id: 'safety',
-    iconName: 'shield-checkmark-outline',
     title: 'Travel Safety',
-    subtitle: 'Live advisories & risk intelligence',
-    color: '#10B981',
-    image: 'photo-1516026672322-bc52d61a55d5',
+    subtitle: 'Live advisories & protection alerts',
+    tag: 'Shield',
+    icon: 'shield-checkmark-outline',
+    color: '#059669',
+    softBg: 'rgba(16, 185, 129, 0.12)',
     route: '/safety',
   },
   {
-    id: 'tracking',
-    iconName: 'locate-outline',
-    title: 'GPS Tracking',
-    subtitle: 'Real-time route & check-in telemetry',
-    color: '#06B6D4',
-    image: 'photo-1473448912268-2022ce9509d8',
-    route: '/gps-tracking',
-  },
-  {
-    id: 'emergency',
-    iconName: 'warning-outline',
-    title: 'Emergency Ops',
-    subtitle: '24/7 rapid response & SOS dispatch',
-    color: '#EF4444',
-    image: 'photo-1584515933487-779824d29309',
-    route: '/emergency',
-  },
-  {
-    id: 'wallet',
-    iconName: 'wallet-outline',
-    title: 'My Wallet',
-    subtitle: 'Manage balance & instant top-ups',
-    color: '#14B8A6',
-    image: 'photo-1554224155-6726b3ff858f',
-    route: '/wallet',
-  },
-  {
     id: 'payments',
-    iconName: 'card-outline',
     title: 'Payments',
-    subtitle: 'Receipts, billing & transaction logs',
-    color: '#3B82F6',
-    image: 'photo-1556742049-0cfed4f6a45d',
+    subtitle: 'Transaction history & receipts',
+    tag: 'Billing',
+    icon: 'card-outline',
+    color: '#2563EB',
+    softBg: 'rgba(59, 130, 246, 0.12)',
     route: '/payments',
   },
   {
-    id: 'claims',
-    iconName: 'document-text-outline',
-    title: 'Claims & Cover',
-    subtitle: 'Submit and track protection claims',
-    color: '#8B5CF6',
-    image: 'photo-1450101499163-c8848c66ca85',
-  },
-  {
-    id: 'partners',
-    iconName: 'globe-outline',
-    title: 'Global Partners',
-    subtitle: 'Verified transport & medical network',
-    color: '#10B981',
-    image: 'photo-1521737711867-e3b97375f902',
-  },
-  {
-    id: 'insights',
-    iconName: 'analytics-outline',
-    title: 'Travel Intelligence',
-    subtitle: 'Personal safety score & analytics',
-    color: '#6366F1',
-    image: 'photo-1516321318423-f06f85e504b3',
+    id: 'emergency',
+    title: 'Emergency Ops',
+    subtitle: '24/7 rapid assistance & dispatch',
+    tag: '24/7',
+    icon: 'call-outline',
+    color: '#E11D48',
+    softBg: 'rgba(244, 63, 94, 0.12)',
+    route: '/emergency',
   },
 ];
 
-function serviceImageUrl(photo: string) {
-  return `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=900&q=80`;
-}
+const UPCOMING_MODULES: UpcomingModule[] = [
+  {
+    id: 'claims',
+    title: 'Claims & Cover',
+    subtitle: 'Protection claims & support',
+    icon: 'document-text-outline',
+    color: '#7C3AED',
+  },
+  {
+    id: 'partners',
+    title: 'Travel Partners',
+    subtitle: 'Verified transport network',
+    icon: 'globe-outline',
+    color: '#0D9488',
+  },
+  {
+    id: 'insights',
+    title: 'Travel Insights',
+    subtitle: 'Analytics & safety score',
+    icon: 'analytics-outline',
+    color: '#4F46E5',
+  },
+];
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -166,17 +196,13 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState('');
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
 
-  const colors = darkMode ? DARK_COLORS : LIGHT_COLORS;
-
-  const containerMaxWidth = 960;
-  const effectiveWidth = Math.min(width, containerMaxWidth);
-  const columns = effectiveWidth >= 768 ? 3 : 2;
-  const gap = 14;
-  const horizontalPadding = 40;
-  const cardWidth =
-    (effectiveWidth - horizontalPadding - (columns - 1) * gap) / columns;
+  const ui = darkMode ? DARK_PALETTE : LIGHT_PALETTE;
+  const maxContentWidth = 860;
+  const effectiveWidth = Math.min(width, maxContentWidth);
+  const cardGap = 12;
+  const gridCardWidth = (effectiveWidth - 40 - cardGap) / 2;
 
   const loadProfile = useCallback(
     async (isRefresh = false) => {
@@ -219,7 +245,7 @@ export default function DashboardScreen() {
         setProfile(data as Profile);
         setError('');
       } catch {
-        setError('Unable to sync your account. Pull down to retry.');
+        setError('Unable to load your account. Pull down to retry.');
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -259,37 +285,31 @@ export default function DashboardScreen() {
     router.replace('/');
   };
 
-  const firstName =
-    profile?.full_name?.trim().split(' ')[0] || 'Traveller';
+  const fullName = profile?.full_name?.trim() || 'Traveller';
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={[styles.loadingScreen, { backgroundColor: colors.background }]}
-      >
+      <SafeAreaView style={[styles.loaderWrap, { backgroundColor: ui.canvas }]}>
         <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
         <View
           style={[
-            styles.logoContainer,
-            {
-              backgroundColor: colors.surfaceElevated,
-              borderColor: colors.borderStrong,
-            },
+            styles.brandLogoBox,
+            { backgroundColor: ui.card, borderColor: ui.border },
           ]}
         >
           <Image
             source={require('../../assets/tsc-header-logo.png')}
-            style={styles.logoImage}
+            style={styles.brandLogoImg}
             resizeMode="contain"
           />
         </View>
         <ActivityIndicator
           size="small"
-          color={colors.accent}
-          style={{ marginTop: 22 }}
+          color={ui.accentDeep}
+          style={{ marginTop: 18 }}
         />
-        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-          Securing your command center...
+        <Text style={[styles.loaderText, { color: ui.textSecondary }]}>
+          Preparing your travel workspace...
         </Text>
       </SafeAreaView>
     );
@@ -297,7 +317,7 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView
-      style={[styles.screen, { backgroundColor: colors.background }]}
+      style={[styles.screen, { backgroundColor: ui.canvas }]}
       edges={['top', 'left', 'right']}
     >
       <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
@@ -305,469 +325,366 @@ export default function DashboardScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
-          styles.scrollContent,
-          { maxWidth: containerMaxWidth, alignSelf: 'center', width: '100%' },
+          styles.scrollBody,
+          { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%' },
         ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.accent}
+            tintColor={ui.accentDeep}
           />
         }
       >
-        {/* Top Navigation Bar */}
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <View style={styles.brand}>
+        {/* Top App Bar */}
+        <View style={styles.topBar}>
+          <View style={styles.brandCluster}>
             <View
               style={[
-                styles.logoContainer,
-                {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.borderStrong,
-                },
+                styles.brandLogoBox,
+                { backgroundColor: ui.card, borderColor: ui.border },
               ]}
             >
               <Image
                 source={require('../../assets/tsc-header-logo.png')}
-                style={styles.logoImage}
+                style={styles.brandLogoImg}
                 resizeMode="contain"
               />
             </View>
             <View>
-              <View style={styles.brandRow}>
-                <Text style={[styles.brandName, { color: colors.textPrimary }]}>
-                  TSC
-                </Text>
-                <View
-                  style={[
-                    styles.globalPill,
-                    { backgroundColor: colors.accentSoft },
-                  ]}
-                >
-                  <Text style={[styles.globalPillText, { color: colors.accent }]}>
-                    GLOBAL
-                  </Text>
-                </View>
-              </View>
-              <Text style={[styles.brandCaption, { color: colors.textMuted }]}>
+              <Text style={[styles.brandName, { color: ui.textPrimary }]}>
+                TSC
+              </Text>
+              <Text style={[styles.brandTag, { color: ui.textMuted }]}>
                 TRAVELLERS SAFETY COVERED
               </Text>
             </View>
           </View>
 
-          <View style={styles.headerActions}>
+          <View style={styles.topActions}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
-                darkMode ? 'Switch to light mode' : 'Switch to dark mode'
+                darkMode ? 'Switch to light theme' : 'Switch to dark theme'
               }
-              onPress={() => setDarkMode((v) => !v)}
+              onPress={() => setDarkMode((prev) => !prev)}
               style={({ pressed }) => [
-                styles.iconButton,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.borderStrong,
-                },
+                styles.roundAction,
+                { backgroundColor: ui.card, borderColor: ui.border },
                 pressed && styles.pressed,
               ]}
             >
               <Ionicons
-                name={darkMode ? 'sunny-outline' : 'moon-outline'}
-                size={18}
-                color={colors.textPrimary}
+                name={darkMode ? 'sunny' : 'moon'}
+                size={16}
+                color={darkMode ? '#FBBF24' : ui.textPrimary}
               />
             </Pressable>
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Sign out"
               onPress={handleSignOut}
               disabled={signingOut}
               style={({ pressed }) => [
-                styles.signOutButton,
-                {
-                  borderColor: colors.borderStrong,
-                  backgroundColor: colors.surface,
-                },
+                styles.signOutPill,
+                { backgroundColor: ui.card, borderColor: ui.border },
                 pressed && styles.pressed,
               ]}
             >
               {signingOut ? (
-                <ActivityIndicator size="small" color={colors.accent} />
+                <ActivityIndicator size="small" color={ui.accentDeep} />
               ) : (
-                <View style={styles.signOutInner}>
-                  <Text style={[styles.signOutText, { color: colors.textPrimary }]}>
+                <>
+                  <Text style={[styles.signOutText, { color: ui.textPrimary }]}>
                     Sign out
                   </Text>
                   <Ionicons
                     name="log-out-outline"
                     size={15}
-                    color={colors.accent}
+                    color={ui.textMuted}
                   />
-                </View>
+                </>
               )}
             </Pressable>
           </View>
         </View>
 
-        {/* Hero Command Card */}
+        {/* Flagship Navy Hero Card + Integrated Action Dock */}
         <View
           style={[
             styles.heroCard,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.borderStrong,
-            },
-            !darkMode && styles.lightShadow,
+            { backgroundColor: ui.heroBg },
+            styles.heroShadow,
           ]}
         >
-          <View style={styles.heroTopRow}>
-            <View
-              style={[
-                styles.statusBadge,
-                { backgroundColor: colors.successSoft },
-              ]}
-            >
-              <View
-                style={[styles.onlineDot, { backgroundColor: colors.success }]}
-              />
-              <Text style={[styles.statusBadgeText, { color: colors.success }]}>
-                PROTECTION ACTIVE
-              </Text>
+          {/* Decorative soft circles */}
+          <View style={styles.heroGlowTopRight} />
+          <View style={styles.heroGlowBottomLeft} />
+
+          <View style={styles.heroHeaderRow}>
+            <View style={styles.statusChip}>
+              <View style={styles.statusPulse} />
+              <Text style={styles.statusChipText}>ACCOUNT ACTIVE</Text>
             </View>
 
-            <Text style={[styles.roleTag, { color: colors.textMuted }]}>
-              ID • VERIFIED TRAVELLER
+            <View style={styles.shieldPill}>
+              <MaterialCommunityIcons
+                name="shield-check"
+                size={14}
+                color="#FBBF24"
+              />
+              <Text style={styles.shieldPillText}>GLOBAL COVER</Text>
+            </View>
+          </View>
+
+          <View style={styles.heroUserBlock}>
+            <Text style={styles.heroWelcome}>Welcome back,</Text>
+            <Text style={styles.heroName} numberOfLines={1}>
+              {fullName}
+            </Text>
+            <Text style={styles.heroSubtitle}>
+              Your journeys, real-time tracking, and safety protection in one
+              place.
             </Text>
           </View>
 
-          <View style={styles.heroMain}>
-            <View style={styles.welcomeText}>
-              <Text style={[styles.greeting, { color: colors.textSecondary }]}>
-                Welcome back,
-              </Text>
-              <Text
-                style={[styles.userName, { color: colors.textPrimary }]}
-                numberOfLines={1}
-              >
-                {profile?.full_name || firstName}
-              </Text>
-              <Text
-                style={[styles.welcomeSubtext, { color: colors.textMuted }]}
-              >
-                Real-time journey intelligence, tracking, and rapid emergency
-                response in one command center.
-              </Text>
-            </View>
-
-            <View
-              style={[
-                styles.radarRingOuter,
-                { borderColor: colors.borderStrong },
-              ]}
-            >
-              <View
-                style={[
-                  styles.radarRingInner,
-                  {
-                    backgroundColor: colors.accentSoft,
-                    borderColor: colors.accent,
-                  },
+          {/* 4-Button Quick Action Dock */}
+          <View
+            style={[
+              styles.actionDock,
+              {
+                backgroundColor: ui.heroSurface,
+                borderColor: ui.heroBorder,
+              },
+            ]}
+          >
+            {DOCK_ACTIONS.map((action) => (
+              <Pressable
+                key={action.id}
+                accessibilityRole="button"
+                onPress={() => router.push(action.route as any)}
+                style={({ pressed }) => [
+                  styles.dockItem,
+                  pressed && styles.pressed,
                 ]}
               >
-                <MaterialCommunityIcons
-                  name="shield-airplane-outline"
-                  size={28}
-                  color={colors.accent}
-                />
-              </View>
-            </View>
+                <View
+                  style={[styles.dockIconWrap, { backgroundColor: action.bg }]}
+                >
+                  <Ionicons name={action.icon} size={20} color={action.tint} />
+                </View>
+                <Text style={styles.dockLabel} numberOfLines={1}>
+                  {action.label}
+                </Text>
+              </Pressable>
+            ))}
           </View>
+        </View>
 
-          {/* Quick Action Strip inside Hero */}
-          <View
-            style={[
-              styles.heroActionRow,
-              { borderTopColor: colors.border },
-            ]}
-          >
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push('/journeys')}
-              style={({ pressed }) => [
-                styles.primaryActionBtn,
-                { backgroundColor: colors.accent },
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons name="navigate" size={15} color="#061533" />
-              <Text style={styles.primaryActionText}>Active Journeys</Text>
-            </Pressable>
+        {/* Core Services Section (2x2 Clean Bento Grid) */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: ui.textPrimary }]}>
+            Travel & Safety Services
+          </Text>
+          <Text style={[styles.sectionHint, { color: ui.textMuted }]}>
+            ESSENTIALS
+          </Text>
+        </View>
 
+        <View style={styles.bentoGrid}>
+          {CORE_MODULES.map((mod) => (
             <Pressable
+              key={mod.id}
               accessibilityRole="button"
-              onPress={() => router.push('/emergency')}
+              onPress={() => router.push(mod.route as any)}
               style={({ pressed }) => [
-                styles.sosActionBtn,
+                styles.bentoCard,
                 {
-                  backgroundColor: colors.dangerSoft,
-                  borderColor: 'rgba(239, 68, 68, 0.35)',
+                  width: gridCardWidth,
+                  backgroundColor: ui.card,
+                  borderColor: ui.border,
                 },
-                pressed && styles.pressed,
+                !darkMode && styles.cardElevation,
+                pressed && styles.cardPressed,
               ]}
             >
-              <Ionicons name="alert-circle" size={16} color={colors.danger} />
-              <Text style={[styles.sosActionText, { color: colors.danger }]}>
-                Emergency SOS
+              <View style={styles.bentoTop}>
+                <View
+                  style={[styles.bentoIcon, { backgroundColor: mod.softBg }]}
+                >
+                  <Ionicons name={mod.icon} size={21} color={mod.color} />
+                </View>
+                <View
+                  style={[styles.bentoTag, { backgroundColor: ui.cardMuted }]}
+                >
+                  <Text
+                    style={[styles.bentoTagText, { color: ui.textSecondary }]}
+                  >
+                    {mod.tag}
+                  </Text>
+                </View>
+              </View>
+
+              <Text
+                style={[styles.bentoTitle, { color: ui.textPrimary }]}
+                numberOfLines={1}
+              >
+                {mod.title}
               </Text>
+              <Text
+                style={[styles.bentoSub, { color: ui.textSecondary }]}
+                numberOfLines={2}
+              >
+                {mod.subtitle}
+              </Text>
+
+              <View style={styles.bentoFooter}>
+                <Text style={[styles.bentoOpen, { color: mod.color }]}>
+                  Open
+                </Text>
+                <Ionicons name="arrow-forward" size={14} color={mod.color} />
+              </View>
             </Pressable>
-          </View>
+          ))}
         </View>
 
-        {/* Quick Overview Card */}
-        <View style={styles.sectionHeading}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-            Journey Overview
-          </Text>
-          <Text style={[styles.sectionHint, { color: colors.textMuted }]}>
-            LIVE ACTIVITY
-          </Text>
-        </View>
-
+        {/* Wallet & GPS Highlight Strip */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open your journeys"
-          onPress={() => router.push('/journeys')}
+          onPress={() => router.push('/wallet')}
           style={({ pressed }) => [
-            styles.overviewCard,
+            styles.featureStrip,
             {
-              backgroundColor: colors.surface,
-              borderColor: colors.borderStrong,
+              backgroundColor: ui.card,
+              borderColor: ui.border,
             },
-            !darkMode && styles.lightShadow,
-            pressed && styles.pressedCard,
+            !darkMode && styles.cardElevation,
+            pressed && styles.cardPressed,
           ]}
         >
           <View
             style={[
-              styles.overviewIcon,
-              { backgroundColor: colors.accentSoft },
+              styles.stripIcon,
+              { backgroundColor: 'rgba(20, 184, 166, 0.12)' },
             ]}
           >
-            <Ionicons
-              name="airplane"
-              size={20}
-              color={colors.accent}
-            />
+            <Ionicons name="wallet-outline" size={22} color="#0D9488" />
           </View>
-
-          <View style={styles.overviewDetails}>
-            <Text
-              style={[styles.overviewTitle, { color: colors.textPrimary }]}
-            >
-              My Journeys & Itineraries
+          <View style={styles.stripBody}>
+            <Text style={[styles.stripTitle, { color: ui.textPrimary }]}>
+              My Wallet & Travel Funds
             </Text>
-            <Text
-              style={[
-                styles.overviewDescription,
-                { color: colors.textSecondary },
-              ]}
-            >
-              View scheduled trips, check-in status, and route safety logs.
+            <Text style={[styles.stripSub, { color: ui.textSecondary }]}>
+              View your balance, fund your wallet, and manage trip expenses
             </Text>
           </View>
-
-          <View
-            style={[
-              styles.overviewArrow,
-              { backgroundColor: colors.surfaceElevated },
-            ]}
-          >
+          <View style={[styles.stripArrow, { backgroundColor: ui.cardMuted }]}>
             <Ionicons
               name="chevron-forward"
               size={18}
-              color={colors.accent}
+              color={ui.textSecondary}
             />
           </View>
         </Pressable>
 
-        {/* Core Services Grid */}
-        <View style={styles.sectionHeading}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-            Safety & Travel Suite
+        {/* Horizontal Upcoming Suite */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: ui.textPrimary }]}>
+            Expanding Suite
           </Text>
-          <Text style={[styles.sectionHint, { color: colors.textMuted }]}>
-            {SERVICES.filter((s) => Boolean(s.route)).length} ACTIVE MODULES
+          <Text style={[styles.sectionHint, { color: ui.textMuted }]}>
+            COMING SOON
           </Text>
         </View>
 
-        <View style={styles.serviceGrid}>
-          {SERVICES.map((service) => {
-            const isAvailable = Boolean(service.route);
-
-            return (
-              <Pressable
-                key={service.id}
-                accessibilityRole="button"
-                accessibilityLabel={`${service.title}. ${
-                  isAvailable ? 'Available' : 'Coming soon'
-                }`}
-                disabled={!isAvailable}
-                onPress={() => service.route && router.push(service.route as any)}
-                style={({ pressed }) => [
-                  styles.serviceCard,
-                  {
-                    width: cardWidth,
-                    borderColor: isAvailable
-                      ? `${service.color}70`
-                      : 'rgba(148, 163, 184, 0.25)',
-                    opacity: isAvailable ? 1 : 0.78,
-                  },
-                  pressed && isAvailable && styles.pressedCard,
-                ]}
-              >
-                <ImageBackground
-                  source={{ uri: serviceImageUrl(service.image) }}
-                  style={styles.serviceImage}
-                  imageStyle={styles.serviceImageBackground}
-                  resizeMode="cover"
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.horizontalList}
+        >
+          {UPCOMING_MODULES.map((item) => (
+            <View
+              key={item.id}
+              style={[
+                styles.upcomingCard,
+                {
+                  backgroundColor: ui.card,
+                  borderColor: ui.border,
+                },
+                !darkMode && styles.cardElevation,
+              ]}
+            >
+              <View style={styles.upcomingHeader}>
+                <View
+                  style={[
+                    styles.upcomingIcon,
+                    { backgroundColor: `${item.color}16` },
+                  ]}
                 >
-                  <View
-                    style={[
-                      styles.serviceImageOverlay,
-                      {
-                        backgroundColor: isAvailable
-                          ? 'rgba(6, 16, 36, 0.72)'
-                          : 'rgba(10, 18, 34, 0.84)',
-                      },
-                    ]}
-                  />
+                  <Ionicons name={item.icon} size={18} color={item.color} />
+                </View>
+                <View
+                  style={[styles.soonBadge, { backgroundColor: ui.cardMuted }]}
+                >
+                  <Text style={[styles.soonText, { color: ui.textMuted }]}>
+                    Soon
+                  </Text>
+                </View>
+              </View>
+              <Text
+                style={[styles.upcomingTitle, { color: ui.textPrimary }]}
+                numberOfLines={1}
+              >
+                {item.title}
+              </Text>
+              <Text
+                style={[styles.upcomingSub, { color: ui.textSecondary }]}
+                numberOfLines={2}
+              >
+                {item.subtitle}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
 
-                  <View style={styles.serviceCardContent}>
-                    <View style={styles.serviceCardTop}>
-                      <View
-                        style={[
-                          styles.serviceIcon,
-                          {
-                            backgroundColor: `${service.color}28`,
-                            borderColor: `${service.color}88`,
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name={service.iconName}
-                          size={19}
-                          color="#FFFFFF"
-                        />
-                      </View>
-
-                      {isAvailable ? (
-                        <View style={styles.chevronCircle}>
-                          <Ionicons
-                            name="arrow-forward"
-                            size={13}
-                            color="#FFFFFF"
-                          />
-                        </View>
-                      ) : (
-                        <View style={styles.soonBadge}>
-                          <Text style={styles.soonBadgeText}>SOON</Text>
-                        </View>
-                      )}
-                    </View>
-
-                    <View style={styles.serviceTextBlock}>
-                      <Text style={styles.serviceTitle} numberOfLines={2}>
-                        {service.title}
-                      </Text>
-                      <Text style={styles.serviceSubtitle} numberOfLines={2}>
-                        {service.subtitle}
-                      </Text>
-                    </View>
-
-                    <View style={styles.serviceFooter}>
-                      <View
-                        style={[
-                          styles.serviceDot,
-                          {
-                            backgroundColor: isAvailable
-                              ? service.color
-                              : '#94A3B8',
-                          },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.serviceStatus,
-                          {
-                            color: isAvailable ? '#A7F3D0' : '#94A3B8',
-                          },
-                        ]}
-                      >
-                        {isAvailable ? 'Ready' : 'In development'}
-                      </Text>
-                    </View>
-                  </View>
-                </ImageBackground>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {/* Travel Advisory Banner */}
+        {/* Safety Advisory Note */}
         <View
           style={[
-            styles.safetyCard,
+            styles.advisoryCard,
             {
-              backgroundColor: colors.surface,
-              borderColor: colors.borderStrong,
+              backgroundColor: ui.card,
+              borderColor: ui.border,
             },
-            !darkMode && styles.lightShadow,
           ]}
         >
           <View
             style={[
-              styles.safetyIcon,
-              { backgroundColor: colors.accentSoft },
+              styles.advisoryIcon,
+              { backgroundColor: 'rgba(245, 158, 11, 0.14)' },
             ]}
           >
-            <Ionicons
-              name="information-circle"
-              size={22}
-              color={colors.accent}
-            />
+            <Ionicons name="shield-half" size={18} color={ui.accentDeep} />
           </View>
-
-          <View style={styles.safetyContent}>
-            <Text style={[styles.safetyTitle, { color: colors.textPrimary }]}>
-              Smart Travel Protocol
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.advisoryTitle, { color: ui.textPrimary }]}>
+              Travel safely
             </Text>
-            <Text
-              style={[
-                styles.safetyDescription,
-                { color: colors.textSecondary },
-              ]}
-            >
-              Keep location sharing enabled during transit and log every
-              inter-city itinerary for uninterrupted coverage.
+            <Text style={[styles.advisoryBody, { color: ui.textSecondary }]}>
+              Stay aware of your surroundings and follow local safety guidance
+              during your journey.
             </Text>
           </View>
         </View>
 
         {!!error && (
-          <View style={styles.errorCard}>
-            <View style={styles.errorRow}>
-              <Ionicons name="cloud-offline-outline" size={18} color="#EF4444" />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{error}</Text>
             <Pressable
               accessibilityRole="button"
               onPress={() => loadProfile()}
-              style={styles.retryBtn}
             >
-              <Text style={[styles.retryText, { color: colors.accentLight }]}>
-                Retry connection
+              <Text style={[styles.retryText, { color: ui.accentDeep }]}>
+                Try again
               </Text>
             </Pressable>
           </View>
@@ -775,14 +692,14 @@ export default function DashboardScreen() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={[styles.footerBrand, { color: colors.accent }]}>
-            TSC GLOBAL
+          <Text style={[styles.footerLogo, { color: ui.textPrimary }]}>
+            TSC
           </Text>
-          <Text style={[styles.footerText, { color: colors.textMuted }]}>
+          <Text style={[styles.footerSub, { color: ui.textMuted }]}>
             TRAVELLERS SAFETY COVERED
           </Text>
-          <Text style={[styles.footerCopyright, { color: colors.textMuted }]}>
-            Protected journeys worldwide.
+          <Text style={[styles.footerNote, { color: ui.textMuted }]}>
+            Travel with greater awareness.
           </Text>
         </View>
       </ScrollView>
@@ -792,299 +709,392 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 44 },
-  loadingScreen: {
+  scrollBody: { paddingHorizontal: 20, paddingBottom: 44 },
+  loaderWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
+  loaderText: {
+    fontSize: 13,
+    marginTop: 12,
+    fontWeight: '500',
+  },
+
+  cardElevation: {
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.04,
+        shadowRadius: 12,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  heroShadow: {
+    ...Platform.select({
+      ios: {
+        shadowColor: '#091B3A',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.22,
+        shadowRadius: 18,
+      },
+      android: { elevation: 6 },
+    }),
+  },
+
+  topBar: {
+    height: 66,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  brandCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  brandLogoBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 6,
   },
-  logoImage: { width: '100%', height: '100%' },
-  loadingText: { fontSize: 13, marginTop: 14, fontWeight: '500' },
-
-  lightShadow: {
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+  brandLogoImg: { width: '100%', height: '100%' },
+  brandName: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
-
-  header: {
-    height: 68,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    marginBottom: 20,
-  },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 11 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  brandName: { fontSize: 17, fontWeight: '800', letterSpacing: 1 },
-  globalPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 5,
-  },
-  globalPillText: { fontSize: 8, fontWeight: '800', letterSpacing: 0.8 },
-  brandCaption: {
+  brandTag: {
     fontSize: 9,
     fontWeight: '600',
     letterSpacing: 0.9,
-    marginTop: 2,
+    marginTop: 1,
   },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconButton: {
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  roundAction: {
     width: 38,
     height: 38,
-    borderRadius: 12,
+    borderRadius: 19,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  signOutButton: {
+  signOutPill: {
     height: 38,
-    paddingHorizontal: 13,
+    paddingHorizontal: 14,
+    borderRadius: 19,
     borderWidth: 1,
-    borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
   },
-  signOutInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  signOutText: { fontSize: 12, fontWeight: '600' },
-  pressed: { opacity: 0.75 },
-  pressedCard: { opacity: 0.92, transform: [{ scale: 0.985 }] },
+  signOutText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  pressed: { opacity: 0.72 },
+  cardPressed: { opacity: 0.92, transform: [{ scale: 0.985 }] },
 
   heroCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 18,
+    borderRadius: 24,
+    padding: 20,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  heroTopRow: {
+  heroGlowTopRight: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    top: -60,
+    right: -40,
+  },
+  heroGlowBottomLeft: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    bottom: -50,
+    left: -30,
+  },
+  heroHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 16,
   },
-  statusBadge: {
+  statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.16)',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 20,
+    borderRadius: 99,
   },
-  onlineDot: { width: 7, height: 7, borderRadius: 4 },
-  statusBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.7 },
-  roleTag: { fontSize: 10, fontWeight: '700', letterSpacing: 0.6 },
-  heroMain: {
+  statusPulse: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#34D399',
+  },
+  statusChipText: {
+    color: '#A7F3D0',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  shieldPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 99,
+  },
+  shieldPillText: {
+    color: '#E2E8F0',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.7,
+  },
+  heroUserBlock: {
+    marginBottom: 18,
+  },
+  heroWelcome: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  heroName: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '800',
+    marginTop: 2,
+    letterSpacing: -0.4,
+  },
+  heroSubtitle: {
+    color: '#CBD5E1',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 6,
+  },
+  actionDock: {
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
   },
-  welcomeText: { flex: 1 },
-  greeting: { fontSize: 13, fontWeight: '500' },
-  userName: { fontSize: 22, fontWeight: '800', marginTop: 2, letterSpacing: -0.3 },
-  welcomeSubtext: { fontSize: 12, lineHeight: 17, marginTop: 6 },
-  radarRingOuter: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radarRingInner: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroActionRow: {
-    marginTop: 16,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  primaryActionBtn: {
+  dockItem: {
     flex: 1,
-    height: 40,
-    borderRadius: 12,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 7,
   },
-  primaryActionText: {
-    color: '#061533',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  sosActionBtn: {
-    flex: 1,
-    height: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: 'row',
+  dockIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
   },
-  sosActionText: {
-    fontSize: 12,
-    fontWeight: '800',
+  dockLabel: {
+    color: '#F8FAFC',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
-  sectionHeading: {
+  sectionHeader: {
     marginTop: 24,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  sectionTitle: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
-  sectionHint: { fontSize: 10, fontWeight: '700', letterSpacing: 0.9 },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  sectionHint: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.9,
+  },
 
-  overviewCard: {
+  bentoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  bentoCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
+    justifyContent: 'space-between',
+  },
+  bentoTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  bentoIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bentoTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  bentoTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  bentoTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  bentoSub: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  bentoFooter: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  bentoOpen: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  featureStrip: {
+    marginTop: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  stripIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stripBody: {
+    flex: 1,
+  },
+  stripTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  stripSub: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  stripArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  horizontalList: {
+    gap: 12,
+    paddingRight: 8,
+  },
+  upcomingCard: {
+    width: 190,
     borderRadius: 18,
     borderWidth: 1,
     padding: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
   },
-  overviewIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 13,
-  },
-  overviewDetails: { flex: 1, paddingRight: 8 },
-  overviewTitle: { fontSize: 14, fontWeight: '700' },
-  overviewDescription: { fontSize: 12, lineHeight: 17, marginTop: 2 },
-  overviewArrow: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  serviceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  serviceCard: {
-    minHeight: 176,
-    borderRadius: 18,
-    borderWidth: 1.2,
-    overflow: 'hidden',
-    backgroundColor: '#0F172A',
-  },
-  serviceImage: { flex: 1, minHeight: 176, justifyContent: 'flex-end' },
-  serviceImageBackground: { borderRadius: 17 },
-  serviceImageOverlay: {
-    ...StyleSheet.absoluteFill,
-  },
-  serviceCardContent: {
-    flex: 1,
-    minHeight: 176,
-    padding: 14,
-    justifyContent: 'space-between',
-  },
-  serviceCardTop: {
+  upcomingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  serviceIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chevronCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+  upcomingIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
   soonBadge: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: 'rgba(148, 163, 184, 0.2)',
   },
-  soonBadgeText: {
-    color: '#CBD5E1',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.6,
+  soonText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
-  serviceTextBlock: { marginTop: 12 },
-  serviceTitle: {
-    color: '#FFFFFF',
+  upcomingTitle: {
     fontSize: 14,
-    lineHeight: 19,
-    fontWeight: '800',
+    fontWeight: '700',
   },
-  serviceSubtitle: {
-    color: '#CBD5E1',
+  upcomingSub: {
     fontSize: 11,
-    lineHeight: 15,
+    lineHeight: 16,
     marginTop: 4,
   },
-  serviceFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    gap: 6,
-  },
-  serviceDot: { width: 6, height: 6, borderRadius: 3 },
-  serviceStatus: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
 
-  safetyCard: {
+  advisoryCard: {
     marginTop: 22,
     borderRadius: 18,
     borderWidth: 1,
     padding: 15,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
-  safetyIcon: {
-    width: 40,
-    height: 40,
+  advisoryIcon: {
+    width: 38,
+    height: 38,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 13,
   },
-  safetyContent: { flex: 1 },
-  safetyTitle: { fontSize: 13, fontWeight: '700' },
-  safetyDescription: { fontSize: 12, lineHeight: 17, marginTop: 2 },
+  advisoryTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  advisoryBody: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
 
-  errorCard: {
+  errorBanner: {
     marginTop: 16,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
     borderColor: 'rgba(239, 68, 68, 0.3)',
@@ -1092,13 +1102,34 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
   },
-  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  errorText: { color: '#EF4444', fontSize: 12, flex: 1 },
-  retryBtn: { marginTop: 8, alignSelf: 'flex-start' },
-  retryText: { fontSize: 12, fontWeight: '700' },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 12,
+  },
+  retryText: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 6,
+  },
 
-  footer: { alignItems: 'center', paddingTop: 36, paddingBottom: 12 },
-  footerBrand: { fontSize: 14, fontWeight: '900', letterSpacing: 2 },
-  footerText: { fontSize: 9, letterSpacing: 1.4, fontWeight: '700', marginTop: 4 },
-  footerCopyright: { fontSize: 11, marginTop: 6 },
+  footer: {
+    alignItems: 'center',
+    paddingTop: 34,
+    paddingBottom: 8,
+  },
+  footerLogo: {
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  footerSub: {
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 1.4,
+    marginTop: 4,
+  },
+  footerNote: {
+    fontSize: 11,
+    marginTop: 5,
+  },
 });

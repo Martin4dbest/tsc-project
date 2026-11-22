@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
-  AppState,
   Pressable,
   StyleSheet,
   Text,
@@ -9,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { supabase } from "../../../lib/supabase";
@@ -28,21 +28,15 @@ type Props = {
   onWalletUpdated: () => void;
 };
 
-export default function WalletFunding({
-  walletActive,
-  onWalletUpdated,
-}: Props) {
+export default function WalletFunding({ walletActive }: Props) {
+  const router = useRouter();
   const [amount, setAmount] = useState("5000");
   const [funding, setFunding] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [pendingReference, setPendingReference] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeType, setNoticeType] = useState<"success" | "error" | "info">(
     "info"
   );
-
-  const pendingRef = useRef("");
-  const checkingRef = useRef(false);
 
   const showNotice = (
     message: string,
@@ -52,89 +46,12 @@ export default function WalletFunding({
     setNoticeType(type);
   };
 
-  const verifyPayment = useCallback(
-    async (reference: string) => {
-      if (!reference || checkingRef.current) return;
-
-      checkingRef.current = true;
-      setChecking(true);
-
-      try {
-        const {
-          data: { session },
-          error: sessionError,
-        } = await supabase.auth.getSession();
-
-        if (sessionError || !session?.access_token) {
-          showNotice("Please sign in again to verify your payment.", "error");
-          return;
-        }
-
-        if (!API_URL) {
-          showNotice("Payment service configuration is missing.", "error");
-          return;
-        }
-
-        const response = await fetch(
-          `${API_URL}/api/payments/paystack/verify`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({ reference }),
-          }
-        );
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-          pendingRef.current = "";
-          setPendingReference("");
-          showNotice(
-            "Payment confirmed! Your wallet has been funded.",
-            "success"
-          );
-          onWalletUpdated();
-          return;
-        }
-
-        if (response.status === 409) {
-          showNotice(
-            "Payment is not yet confirmed. If you completed checkout, please check again shortly.",
-            "info"
-          );
-          return;
-        }
-
-        showNotice(
-          result.error || "We could not verify this payment. Please try again.",
-          "error"
-        );
-      } catch (error) {
-        console.error("Mobile payment verification failed:", error);
-        showNotice(
-          "Unable to reach the payment service. Please check your connection and try again.",
-          "error"
-        );
-      } finally {
-        checkingRef.current = false;
-        setChecking(false);
-      }
-    },
-    [onWalletUpdated]
-  );
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active" && pendingRef.current) {
-        void verifyPayment(pendingRef.current);
-      }
+  const openVerification = (reference: string) => {
+    router.push({
+      pathname: "/wallet-payment",
+      params: { reference },
     });
-
-    return () => subscription.remove();
-  }, [verifyPayment]);
+  };
 
   const startFunding = async () => {
     const naira = Number(amount.trim().replace(/,/g, ""));
@@ -201,13 +118,8 @@ export default function WalletFunding({
         return;
       }
 
-      pendingRef.current = result.reference;
       setPendingReference(result.reference);
-
-      showNotice(
-        "Complete your payment securely. TSC will return here after checkout.",
-        "info"
-      );
+      showNotice("Paystack checkout is opening securely inside TSC.", "info");
 
       const checkout = await WebBrowser.openAuthSessionAsync(
         result.authorizationUrl,
@@ -220,8 +132,19 @@ export default function WalletFunding({
           returnedUrl.searchParams.get("reference");
 
         if (returnedReference) {
-          await verifyPayment(returnedReference);
+          setPendingReference("");
+          openVerification(returnedReference);
+          return;
         }
+      }
+
+      // Expo Router may already have received the deep link on Android.
+      // Keep the reference available in case the customer needs to verify manually.
+      if (checkout.type === "cancel" || checkout.type === "dismiss") {
+        showNotice(
+          "Checkout was closed. If you completed payment, check its status below.",
+          "info"
+        );
       }
     } catch (error) {
       console.error("Mobile wallet funding failed:", error);
@@ -235,7 +158,6 @@ export default function WalletFunding({
   };
 
   const formattedAmount = Number(amount.replace(/,/g, ""));
-  const canCheck = Boolean(pendingReference) && !checking;
 
   return (
     <View style={styles.card}>
@@ -264,7 +186,7 @@ export default function WalletFunding({
           keyboardType="decimal-pad"
           placeholder="Enter amount"
           placeholderTextColor="#A0AEC0"
-          editable={!funding && !checking}
+          editable={!funding}
           style={styles.input}
         />
       </View>
@@ -281,10 +203,10 @@ export default function WalletFunding({
 
       <Pressable
         onPress={() => void startFunding()}
-        disabled={funding || checking || !walletActive}
+        disabled={funding || !walletActive}
         style={[
           styles.button,
-          (!walletActive || funding || checking) && styles.buttonDisabled,
+          (!walletActive || funding) && styles.buttonDisabled,
         ]}
       >
         {funding ? (
@@ -335,18 +257,11 @@ export default function WalletFunding({
 
       {pendingReference ? (
         <Pressable
-          onPress={() => void verifyPayment(pendingReference)}
-          disabled={!canCheck}
+          onPress={() => openVerification(pendingReference)}
           style={styles.checkButton}
         >
-          {checking ? (
-            <ActivityIndicator size="small" color={TEAL} />
-          ) : (
-            <Ionicons name="refresh-outline" size={17} color={TEAL} />
-          )}
-          <Text style={styles.checkButtonText}>
-            {checking ? "Checking payment..." : "Check payment status"}
-          </Text>
+          <Ionicons name="refresh-outline" size={17} color={TEAL} />
+          <Text style={styles.checkButtonText}>Check payment status</Text>
         </Pressable>
       ) : null}
 
