@@ -48,6 +48,8 @@ const LIGHT_COLORS = {
 };
 
 const services = [
+  { id: 'wallet', icon: '₦', title: 'My Wallet', subtitle: 'View your balance and fund your wallet', color: '#14B8A6', image: 'photo-1554224155-6726b3ff858f' },
+  { id: 'payments', icon: '↗', title: 'Payments', subtitle: 'Review payment history and statuses', color: '#60A5FA', image: 'photo-1556742049-0cfed4f6a45d' },
   {
     id: 'journey',
     icon: '✈',
@@ -106,7 +108,7 @@ const services = [
   },
 ];
 
-const availableServices = ['journey', 'tracking', 'emergency', 'safety', 'wallet'];
+const availableServices = ['journey', 'tracking', 'emergency', 'safety', 'wallet', 'payments'];
 
 function serviceImageUrl(photo: string) {
   return `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=1000&q=85`;
@@ -211,6 +213,7 @@ export default function DashboardScreen() {
     if (serviceId === 'emergency') router.push('/emergency');
     if (serviceId === 'safety') router.push('/safety');
     if (serviceId === 'wallet') router.push('/wallet');
+    if (serviceId === 'payments') router.push('/payments');
   };
 
   if (loading) {
