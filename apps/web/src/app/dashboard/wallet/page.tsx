@@ -106,8 +106,8 @@ export default async function TravellerWalletPage() {
       <header className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
         <div>
           <div className="mb-2 flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-blue-600" />
-            <span className="text-xs font-bold uppercase tracking-[0.2em] text-blue-700">
+            <span className="h-2 w-2 rounded-full bg-teal-600" />
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-teal-700">
               Traveller Financial Centre
             </span>
           </div>
@@ -121,7 +121,7 @@ export default async function TravellerWalletPage() {
 
         <Link
           href="/dashboard"
-          className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 sm:self-auto"
+          className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 sm:self-auto"
         >
           <span aria-hidden="true">←</span>
           Back to dashboard
@@ -137,7 +137,7 @@ export default async function TravellerWalletPage() {
         </section>
       ) : !wallet ? (
         <section className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm sm:p-12">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
             <WalletIcon />
           </div>
           <h2 className="mt-5 text-lg font-extrabold text-slate-900">
@@ -150,22 +150,22 @@ export default async function TravellerWalletPage() {
       ) : (
         <>
           {/* Main balance card */}
-          <section className="relative isolate overflow-hidden rounded-[28px] bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 p-6 text-white shadow-xl shadow-blue-950/15 sm:p-9">
+          <section className="relative isolate overflow-hidden rounded-[28px] bg-gradient-to-br from-slate-950 via-teal-950 to-emerald-950 p-6 text-white shadow-xl shadow-teal-950/20 sm:p-9">
             <div className="pointer-events-none absolute -right-20 -top-28 h-80 w-80 rounded-full border border-white/10" />
             <div className="pointer-events-none absolute -right-8 -top-16 h-56 w-56 rounded-full border border-white/10" />
-            <div className="pointer-events-none absolute -bottom-32 left-1/3 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-32 left-1/3 h-64 w-64 rounded-full bg-emerald-400/10 blur-3xl" />
 
             <div className="relative">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-blue-100 backdrop-blur">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-teal-100 backdrop-blur">
                     <WalletIcon />
                   </div>
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-200">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-200">
                       TSC Digital Wallet
                     </p>
-                    <p className="mt-1 text-sm text-blue-100/75">
+                    <p className="mt-1 text-sm text-teal-100/75">
                       Traveller account balance
                     </p>
                   </div>
@@ -184,23 +184,23 @@ export default async function TravellerWalletPage() {
               </div>
 
               <div className="mt-10">
-                <p className="text-sm font-medium text-blue-100/75">
+                <p className="text-sm font-medium text-teal-100/75">
                   Available wallet balance
                 </p>
                 <h2 className="mt-3 break-words text-lg font-extrabold tracking-tight sm:text-lg lg:text-xl">
                   {money(Number(wallet.balance_minor), wallet.currency_code)}
                 </h2>
-                <p className="mt-4 text-sm text-blue-100/65">
+                <p className="mt-4 text-sm text-teal-100/65">
                   Your current available balance
                 </p>
               </div>
 
               <div className="mt-9 flex flex-wrap items-center justify-between gap-4 border-t border-white/15 pt-5">
-                <div className="flex items-center gap-2 text-sm text-blue-100/80">
+                <div className="flex items-center gap-2 text-sm text-teal-100/80">
                   <ShieldIcon />
                   <span>Protected by TSC wallet security</span>
                 </div>
-                <span className="text-xs font-semibold tracking-wider text-blue-200/70">
+                <span className="text-xs font-semibold tracking-wider text-teal-200/70">
                   NGN WALLET
                 </span>
               </div>
@@ -253,7 +253,7 @@ export default async function TravellerWalletPage() {
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-semibold text-slate-500">Transactions</span>
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-50 text-teal-600">
                     <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
                       <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                     </svg>
@@ -272,8 +272,8 @@ export default async function TravellerWalletPage() {
             <div className="flex flex-col justify-between gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:p-7">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-blue-600" />
-                  <span className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">
+                  <span className="h-2 w-2 rounded-full bg-teal-600" />
+                  <span className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
                     Account activity
                   </span>
                 </div>
@@ -291,7 +291,7 @@ export default async function TravellerWalletPage() {
 
             {!activity.length ? (
               <div className="px-6 py-14 text-center sm:py-16">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
                   <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8" aria-hidden="true">
                     <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" strokeWidth="1.6" />
                     <path d="M7 9h10M7 13h6M7 16h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -423,8 +423,8 @@ export default async function TravellerWalletPage() {
           </section>
 
           {/* Security reassurance */}
-          <section className="flex flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-5 sm:flex-row sm:items-center sm:p-6">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-700 shadow-sm">
+          <section className="flex flex-col gap-4 rounded-2xl border border-teal-100 bg-teal-50/70 p-5 sm:flex-row sm:items-center sm:p-6">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-teal-700 shadow-sm">
               <ShieldIcon />
             </div>
             <div>
@@ -446,7 +446,7 @@ export default async function TravellerWalletPage() {
         </span>
         <Link
           href="/dashboard"
-          className="font-semibold text-blue-700 transition hover:text-blue-900"
+          className="font-semibold text-teal-700 transition hover:text-teal-900"
         >
           Return to dashboard →
         </Link>
