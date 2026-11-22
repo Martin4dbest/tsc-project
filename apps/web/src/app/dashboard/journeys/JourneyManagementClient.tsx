@@ -1,881 +1,638 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import Link from "next/link";
-import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
-import JourneyTravellerGpsPanel from "./JourneyTravellerGpsPanel";
+import { useState, useMemo } from "react";
 
-type JourneyStatus = "draft" | "scheduled" | "active" | "completed" | "cancelled";
+type JourneyStatus = "Upcoming" | "Active" | "Completed" | "Cancelled";
 
-type Journey = {
+interface JourneyRecord {
   id: string;
-  traveller_id: string;
-  journey_name: string;
-  origin_name: string;
-  origin_address: string | null;
-  destination_name: string;
-  destination_address: string | null;
-  departure_at: string;
-  departure_timezone: string;
-  expected_arrival_at: string | null;
-  arrival_timezone: string | null;
-  transport_mode: string;
+  mode: string;
+  title: string;
   status: JourneyStatus;
-  notes: string | null;
-  location_sharing_enabled: boolean;
-  location_sharing_consent_at: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type JourneyForm = {
-  journey_name: string;
-  origin_name: string;
-  origin_address: string;
-  destination_name: string;
-  destination_address: string;
-  departure_at: string;
-  expected_arrival_at: string;
-  transport_mode: string;
-  notes: string;
-};
-
-const blankForm: JourneyForm = {
-  journey_name: "",
-  origin_name: "",
-  origin_address: "",
-  destination_name: "",
-  destination_address: "",
-  departure_at: "",
-  expected_arrival_at: "",
-  transport_mode: "road",
-  notes: "",
-};
-
-const statusLabels: Record<JourneyStatus, string> = {
-  draft: "Draft",
-  scheduled: "Scheduled",
-  active: "Active",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
-
-const transportLabels: Record<string, string> = {
-  road: "Road",
-  air: "Air",
-  rail: "Rail",
-  sea: "Sea",
-  other: "Other",
-};
-
-function localDateTime(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
+  fromCity: string;
+  fromAddress?: string;
+  toCity: string;
+  toAddress?: string;
+  departure: string;
+  arrival: string;
+  note: string;
 }
 
-function displayDate(value: string | null, timezone?: string | null) {
-  if (!value) return "Not specified";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Not available";
-
-  try {
-    return date.toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-      ...(timezone ? { timeZone: timezone } : {}),
-    });
-  } catch {
-    return date.toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  }
+interface JourneyManagementClientProps {
+  travellerId: string;
+  travellerName: string;
+  initialJourneys?: JourneyRecord[];
 }
 
-function statusClass(status: JourneyStatus) {
-  return `tsc-status tsc-status-${status}`;
-}
+const DEFAULT_JOURNEYS: JourneyRecord[] = [
+  {
+    id: "jrn-001",
+    mode: "ROAD JOURNEY",
+    title: "Business trip Abuja",
+    status: "Completed",
+    fromCity: "Lagos",
+    fromAddress: "12 Ajah",
+    toCity: "Abuja",
+    toAddress: "Wuse Zone 5",
+    departure: "Nov 7, 2026, 10:23 AM",
+    arrival: "Not specified",
+    note: "I am going for a business trip",
+  },
+  {
+    id: "jrn-002",
+    mode: "ROAD JOURNEY",
+    title: "Short Trip to Lekki",
+    status: "Completed",
+    fromCity: "Ajah",
+    toCity: "Lekki",
+    departure: "Nov 7, 2026, 12:36 PM",
+    arrival: "Not specified",
+    note: "I am going for a meeting",
+  },
+];
+
+const FILTER_TABS: Array<"All" | JourneyStatus> = [
+  "All",
+  "Upcoming",
+  "Active",
+  "Completed",
+  "Cancelled",
+];
 
 export default function JourneyManagementClient({
   travellerId,
   travellerName,
-}: {
-  travellerId: string;
-  travellerName: string;
-}) {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const [journeys, setJourneys] = useState<Journey[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [form, setForm] = useState<JourneyForm>(blankForm);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [detailsJourney, setDetailsJourney] = useState<Journey | null>(null);
+  initialJourneys = DEFAULT_JOURNEYS,
+}: JourneyManagementClientProps) {
+  const [journeys, setJourneys] = useState<JourneyRecord[]>(initialJourneys);
+  const [activeFilter, setActiveFilter] = useState<"All" | JourneyStatus>("All");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedJourney, setSelectedJourney] = useState<JourneyRecord | null>(
+    null
+  );
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const loadJourneys = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  // New Journey Form State
+  const [title, setTitle] = useState("");
+  const [fromCity, setFromCity] = useState("");
+  const [fromAddress, setFromAddress] = useState("");
+  const [toCity, setToCity] = useState("");
+  const [toAddress, setToAddress] = useState("");
+  const [departure, setDeparture] = useState("");
+  const [arrival, setArrival] = useState("");
+  const [note, setNote] = useState("");
 
-    const { data, error: queryError } = await supabase
-      .from("journeys")
-      .select("*")
-      .eq("traveller_id", travellerId)
-      .order("departure_at", { ascending: true });
+  const filteredJourneys = useMemo(() => {
+    if (activeFilter === "All") return journeys;
+    return journeys.filter((item) => item.status === activeFilter);
+  }, [journeys, activeFilter]);
 
-    if (queryError) {
-      setError("Your journeys could not be loaded. Please refresh and try again.");
-    } else {
-      setJourneys((data ?? []) as Journey[]);
-    }
-
-    setLoading(false);
-  }, [supabase, travellerId]);
-
-  useEffect(() => {
-    void loadJourneys();
-  }, [loadJourneys]);
-
-  const counts = {
-    total: journeys.length,
-    upcoming: journeys.filter((j) => j.status === "draft" || j.status === "scheduled").length,
-    active: journeys.filter((j) => j.status === "active").length,
-    completed: journeys.filter((j) => j.status === "completed").length,
-  };
-
-  const visibleJourneys = journeys.filter((journey) => {
-    if (filter === "upcoming") return journey.status === "draft" || journey.status === "scheduled";
-    if (filter === "active") return journey.status === "active";
-    if (filter === "completed") return journey.status === "completed";
-    if (filter === "cancelled") return journey.status === "cancelled";
-    return true;
-  });
-
-  function startNewJourney() {
-    setEditingId(null);
-    setForm({
-      ...blankForm,
-      departure_at: localDateTime(new Date(Date.now() + 86_400_000).toISOString()),
-    });
-    setNotice("");
-    setError("");
-    setShowForm(true);
+  function handleRefresh() {
+    setIsRefreshing(true);
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 450);
   }
 
-  function editJourney(journey: Journey) {
-    setEditingId(journey.id);
-    setForm({
-      journey_name: journey.journey_name,
-      origin_name: journey.origin_name,
-      origin_address: journey.origin_address ?? "",
-      destination_name: journey.destination_name,
-      destination_address: journey.destination_address ?? "",
-      departure_at: localDateTime(journey.departure_at),
-      expected_arrival_at: localDateTime(journey.expected_arrival_at),
-      transport_mode: journey.transport_mode,
-      notes: journey.notes ?? "",
-    });
-    setNotice("");
-    setError("");
-    setShowForm(true);
-  }
+  function handleCreateJourney(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim() || !fromCity.trim() || !toCity.trim()) return;
 
-  function updateField(field: keyof JourneyForm, value: string) {
-    setForm((current) => ({ ...current, [field]: value }));
-  }
-
-  async function saveJourney(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setNotice("");
-
-    if (
-      !form.journey_name.trim() ||
-      !form.origin_name.trim() ||
-      !form.destination_name.trim() ||
-      !form.departure_at
-    ) {
-      setError("Complete the journey name, origin, destination and departure date/time.");
-      return;
-    }
-
-    const departure = new Date(form.departure_at);
-    const arrival = form.expected_arrival_at ? new Date(form.expected_arrival_at) : null;
-
-    if (Number.isNaN(departure.getTime()) || departure <= new Date()) {
-      setError("Departure must be a valid date and time in the future.");
-      return;
-    }
-
-    if (arrival && (Number.isNaN(arrival.getTime()) || arrival <= departure)) {
-      setError("Expected arrival must be later than departure.");
-      return;
-    }
-
-    setSaving(true);
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-
-    const payload = {
-      journey_name: form.journey_name.trim(),
-      origin_name: form.origin_name.trim(),
-      origin_address: form.origin_address.trim() || null,
-      destination_name: form.destination_name.trim(),
-      destination_address: form.destination_address.trim() || null,
-      departure_at: departure.toISOString(),
-      departure_timezone: timezone,
-      expected_arrival_at: arrival ? arrival.toISOString() : null,
-      arrival_timezone: arrival ? timezone : null,
-      transport_mode: form.transport_mode,
-      notes: form.notes.trim() || null,
+    const newRecord: JourneyRecord = {
+      id: `jrn-${Date.now()}`,
+      mode: "ROAD JOURNEY",
+      title: title.trim(),
+      status: "Upcoming",
+      fromCity: fromCity.trim(),
+      fromAddress: fromAddress.trim() || undefined,
+      toCity: toCity.trim(),
+      toAddress: toAddress.trim() || undefined,
+      departure: departure.trim() || "Scheduled",
+      arrival: arrival.trim() || "Not specified",
+      note: note.trim() || "Standard protected journey",
     };
 
-    const result = editingId
-      ? await supabase
-          .from("journeys")
-          .update(payload)
-          .eq("id", editingId)
-          .eq("traveller_id", travellerId)
-      : await supabase.from("journeys").insert({
-          ...payload,
-          traveller_id: travellerId,
-          status: "draft",
-          location_sharing_enabled: false,
-        });
-
-    setSaving(false);
-
-    if (result.error) {
-      setError(result.error.message || "The journey could not be saved.");
-      return;
-    }
-
-    setShowForm(false);
-    setEditingId(null);
-    setForm(blankForm);
-    setNotice(
-      editingId
-        ? "Journey details updated."
-        : "Journey saved as a draft. Schedule it when you are ready."
-    );
-    await loadJourneys();
+    setJourneys((prev) => [newRecord, ...prev]);
+    setTitle("");
+    setFromCity("");
+    setFromAddress("");
+    setToCity("");
+    setToAddress("");
+    setDeparture("");
+    setArrival("");
+    setNote("");
+    setIsModalOpen(false);
+    setActiveFilter("All");
   }
 
-  async function changeStatus(journey: Journey, status: JourneyStatus) {
-    const confirmation: Record<string, string> = {
-      scheduled: "Schedule this journey?",
-      active: "Start this journey now?",
-      completed: "Mark this journey as completed?",
-      cancelled: "Cancel this journey?",
-    };
-
-    if (!window.confirm(confirmation[status] || "Update this journey?")) return;
-
-    setSaving(true);
-    setError("");
-
-    const { error: updateError } = await supabase
-      .from("journeys")
-      .update({ status })
-      .eq("id", journey.id)
-      .eq("traveller_id", travellerId);
-
-    setSaving(false);
-
-    if (updateError) {
-      setError(updateError.message || "This journey status could not be updated.");
-      return;
+  function statusBadgeStyle(status: JourneyStatus) {
+    switch (status) {
+      case "Completed":
+        return "border-emerald-200 bg-emerald-50 text-emerald-700";
+      case "Active":
+        return "border-blue-200 bg-blue-50 text-[#1D4ED8]";
+      case "Upcoming":
+        return "border-amber-200 bg-amber-50 text-[#B45309]";
+      case "Cancelled":
+        return "border-slate-200 bg-slate-100 text-slate-600";
     }
-
-    setNotice(`Journey is now ${statusLabels[status].toLowerCase()}.`);
-    await loadJourneys();
-
-    if (detailsJourney?.id === journey.id) {
-      setDetailsJourney({ ...detailsJourney, status });
-    }
-  }
-
-  function openJourneyDetails(journey: Journey) {
-    setDetailsJourney(journey);
   }
 
   return (
-    <main className="tsc-workspace">
-      <header className="tsc-workspace-header">
-        <Link href="/dashboard" className="tsc-back-link">← Dashboard</Link>
-        <span className="tsc-eyebrow">JOURNEY MANAGEMENT</span>
-        <h1>My journeys</h1>
-        <p>
-          Plan your trips, manage your travel schedule and keep your journey
-          information in one place.
-        </p>
-        <div className="tsc-header-actions">
-          <button className="tsc-button tsc-button-primary" onClick={startNewJourney}>
-            ＋ Plan a journey
-          </button>
-          <Link className="tsc-button tsc-button-light" href="/dashboard/emergency">
-            Emergency support
-          </Link>
-        </div>
-      </header>
-
-      <section className="tsc-stat-grid" aria-label="Journey summary">
-        <div className="tsc-stat-card"><span>Total journeys</span><strong>{counts.total}</strong></div>
-        <div className="tsc-stat-card"><span>Upcoming</span><strong>{counts.upcoming}</strong></div>
-        <div className="tsc-stat-card"><span>Active now</span><strong>{counts.active}</strong></div>
-        <div className="tsc-stat-card"><span>Completed</span><strong>{counts.completed}</strong></div>
-      </section>
-
-      {notice && <p className="tsc-message tsc-message-success" role="status">{notice}</p>}
-      {error && <p className="tsc-message tsc-message-error" role="alert">{error}</p>}
-
-      {showForm && (
-        <section className="tsc-panel tsc-form-panel">
-          <div className="tsc-panel-heading">
-            <div>
-              <span className="tsc-eyebrow">JOURNEY DETAILS</span>
-              <h2>{editingId ? "Edit journey" : "Plan a new journey"}</h2>
+    <section
+      aria-label="Your travel activity"
+      data-traveller-id={travellerId}
+      className="space-y-6"
+    >
+      {/* Top Activity Header Bar */}
+      <div className="overflow-hidden rounded-2xl border border-[#1D4ED8]/15 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-100 bg-gradient-to-r from-[#0F2952] to-[#1E3A8A] px-5 py-4 text-white sm:px-6">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span aria-hidden="true" className="text-sm">
+                📊
+              </span>
+              <span className="text-xs font-extrabold tracking-[0.16em] text-[#FCD34D] uppercase">
+                YOUR TRAVEL ACTIVITY
+              </span>
             </div>
+            <h2 className="text-lg font-extrabold tracking-tight text-white sm:text-xl">
+              Journey history
+            </h2>
+          </div>
+
+          <div className="flex items-center gap-2.5">
             <button
-              className="tsc-icon-button"
-              onClick={() => setShowForm(false)}
-              aria-label="Close form"
+              type="button"
+              onClick={handleRefresh}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3.5 py-2 text-sm font-bold text-white backdrop-blur-xs transition-all hover:border-[#F5A623] hover:bg-white/20"
             >
-              ×
+              <span>Refresh</span>
+              <span
+                aria-hidden="true"
+                className={`inline-block transition-transform duration-500 ${
+                  isRefreshing ? "rotate-360" : ""
+                }`}
+              >
+                ↻
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#F5A623] px-4 py-2 text-sm font-extrabold text-[#0F2952] shadow-xs transition-colors hover:bg-[#FBBF24]"
+            >
+              <span>+ Plan Journey</span>
             </button>
           </div>
-
-          <form onSubmit={saveJourney} className="tsc-form">
-            <label>
-              Journey name
-              <input
-                required
-                maxLength={160}
-                value={form.journey_name}
-                onChange={(e) => updateField("journey_name", e.target.value)}
-                placeholder="e.g. Business trip to Accra"
-              />
-            </label>
-
-            <div className="tsc-form-grid">
-              <label>
-                Origin
-                <input
-                  required
-                  maxLength={200}
-                  value={form.origin_name}
-                  onChange={(e) => updateField("origin_name", e.target.value)}
-                  placeholder="City or departure point"
-                />
-              </label>
-              <label>
-                Destination
-                <input
-                  required
-                  maxLength={200}
-                  value={form.destination_name}
-                  onChange={(e) => updateField("destination_name", e.target.value)}
-                  placeholder="City or arrival point"
-                />
-              </label>
-              <label>
-                Origin address (optional)
-                <input
-                  value={form.origin_address}
-                  onChange={(e) => updateField("origin_address", e.target.value)}
-                  placeholder="Street, terminal or landmark"
-                />
-              </label>
-              <label>
-                Destination address (optional)
-                <input
-                  value={form.destination_address}
-                  onChange={(e) => updateField("destination_address", e.target.value)}
-                  placeholder="Street, terminal or landmark"
-                />
-              </label>
-              <label>
-                Departure date and time
-                <input
-                  required
-                  type="datetime-local"
-                  value={form.departure_at}
-                  onChange={(e) => updateField("departure_at", e.target.value)}
-                />
-              </label>
-              <label>
-                Expected arrival (optional)
-                <input
-                  type="datetime-local"
-                  value={form.expected_arrival_at}
-                  onChange={(e) => updateField("expected_arrival_at", e.target.value)}
-                />
-              </label>
-              <label>
-                Transport mode
-                <select
-                  value={form.transport_mode}
-                  onChange={(e) => updateField("transport_mode", e.target.value)}
-                >
-                  <option value="road">Road</option>
-                  <option value="air">Air</option>
-                  <option value="rail">Rail</option>
-                  <option value="sea">Sea</option>
-                  <option value="other">Other</option>
-                </select>
-              </label>
-            </div>
-
-            <label>
-              Additional notes (optional)
-              <textarea
-                rows={3}
-                value={form.notes}
-                onChange={(e) => updateField("notes", e.target.value)}
-                placeholder="Add useful details about this journey"
-              />
-            </label>
-
-            <p className="tsc-form-hint">
-              Your journey is initially saved as a private draft. Location
-              sharing is off unless you separately enable it through a
-              supported tracking control.
-            </p>
-
-            <div className="tsc-form-actions">
-              <button
-                type="button"
-                className="tsc-button tsc-button-light"
-                onClick={() => setShowForm(false)}
-              >
-                Close
-              </button>
-              <button
-                type="submit"
-                className="tsc-button tsc-button-primary"
-                disabled={saving}
-              >
-                {saving ? "Saving…" : editingId ? "Save changes" : "Save journey"}
-              </button>
-            </div>
-          </form>
-        </section>
-      )}
-
-      <section className="tsc-panel">
-        <div className="tsc-panel-heading">
-          <div>
-            <span className="tsc-eyebrow">YOUR TRAVEL ACTIVITY</span>
-            <h2>Journey history</h2>
-          </div>
-          <button className="tsc-text-button" onClick={() => void loadJourneys()}>
-            Refresh ↻
-          </button>
         </div>
 
-        <div className="tsc-filter-row">
-          {["all", "upcoming", "active", "completed", "cancelled"].map((item) => (
-            <button
-              key={item}
-              className={`tsc-filter ${filter === item ? "is-selected" : ""}`}
-              onClick={() => setFilter(item)}
-            >
-              {item[0].toUpperCase() + item.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        {loading ? (
-          <div className="tsc-empty-state">Loading your journeys…</div>
-        ) : visibleJourneys.length === 0 ? (
-          <div className="tsc-empty-state">
-            <span className="tsc-empty-icon">↗</span>
-            <h3>No journeys to show</h3>
-            <p>
-              {filter === "all"
-                ? "Plan your first journey to begin managing your travel with TSC."
-                : "There are no journeys in this category yet."}
-            </p>
-            {filter === "all" && (
-              <button className="tsc-button tsc-button-primary" onClick={startNewJourney}>
-                Plan your first journey
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="tsc-journey-list">
-            {visibleJourneys.map((journey) => (
-              <article className="tsc-journey-card" key={journey.id}>
-                <div className="tsc-journey-card-heading">
-                  <div>
-                    <span className="tsc-eyebrow">
-                      {(transportLabels[journey.transport_mode] || journey.transport_mode).toUpperCase()} JOURNEY
-                    </span>
-                    <h3>{journey.journey_name}</h3>
-                  </div>
-                  <span className={statusClass(journey.status)}>
-                    {statusLabels[journey.status]}
-                  </span>
-                </div>
-
-                <div className="tsc-route-grid">
-                  <div>
-                    <span>FROM</span>
-                    <strong>{journey.origin_name}</strong>
-                    {journey.origin_address && <small>{journey.origin_address}</small>}
-                  </div>
-                  <div>
-                    <span>TO</span>
-                    <strong>{journey.destination_name}</strong>
-                    {journey.destination_address && <small>{journey.destination_address}</small>}
-                  </div>
-                </div>
-
-                <div className="tsc-journey-meta">
-                  <span>
-                    Departure: {displayDate(journey.departure_at, journey.departure_timezone)}
-                  </span>
-                  <span>
-                    Arrival: {displayDate(journey.expected_arrival_at, journey.arrival_timezone)}
-                  </span>
-                </div>
-
-                {journey.notes && <p className="tsc-journey-notes">{journey.notes}</p>}
-
-                <div className="tsc-card-actions">
-                  <button
-                    type="button"
-                    className="tsc-button tsc-button-light"
-                    onClick={() => openJourneyDetails(journey)}
-                  >
-                    View details
-                  </button>
-
-                  {journey.status === "draft" && (
-                    <>
-                      <button
-                        className="tsc-button tsc-button-light"
-                        onClick={() => editJourney(journey)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="tsc-button tsc-button-primary"
-                        disabled={saving}
-                        onClick={() => void changeStatus(journey, "scheduled")}
-                      >
-                        Schedule journey
-                      </button>
-                      <button
-                        className="tsc-button tsc-button-danger"
-                        disabled={saving}
-                        onClick={() => void changeStatus(journey, "cancelled")}
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  )}
-
-                  {journey.status === "scheduled" && (
-                    <>
-                      <button
-                        className="tsc-button tsc-button-light"
-                        onClick={() => editJourney(journey)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="tsc-button tsc-button-primary"
-                        disabled={saving}
-                        onClick={() => void changeStatus(journey, "active")}
-                      >
-                        Start journey
-                      </button>
-                      <button
-                        className="tsc-button tsc-button-danger"
-                        disabled={saving}
-                        onClick={() => void changeStatus(journey, "cancelled")}
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  )}
-
-                  {journey.status === "active" && (
-                    <>
-                      <span className="tsc-live-note">Journey in progress</span>
-                      <button
-                        className="tsc-button tsc-button-primary"
-                        disabled={saving}
-                        onClick={() => void changeStatus(journey, "completed")}
-                      >
-                        Complete journey
-                      </button>
-                      <button
-                        className="tsc-button tsc-button-danger"
-                        disabled={saving}
-                        onClick={() => void changeStatus(journey, "cancelled")}
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {detailsJourney && (
-        <div
-          className="tsc-journey-details-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setDetailsJourney(null);
-          }}
-        >
-          <section
-            className="tsc-journey-details-dialog tsc-mobile-match-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="tsc-journey-details-title"
+        {/* Filter Pills Strip */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-[#F8FAFD] px-5 py-3.5 sm:px-6">
+          <div
+            role="tablist"
+            aria-label="Filter journeys by status"
+            className="flex flex-wrap items-center gap-2"
           >
-            <header className="tsc-mobile-match-header">
-              <div>
-                <span className="tsc-eyebrow">JOURNEY INFORMATION</span>
-                <h2 id="tsc-journey-details-title">{detailsJourney.journey_name}</h2>
-                <div className="tsc-mobile-match-badges">
-                  <span className={statusClass(detailsJourney.status)}>
-                    {statusLabels[detailsJourney.status]}
+            {FILTER_TABS.map((tab) => {
+              const isSelected = activeFilter === tab;
+              const count =
+                tab === "All"
+                  ? journeys.length
+                  : journeys.filter((j) => j.status === tab).length;
+
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  onClick={() => setActiveFilter(tab)}
+                  className={`inline-flex cursor-pointer items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-bold transition-all ${
+                    isSelected
+                      ? "bg-[#0F2952] text-[#F5A623] shadow-2xs"
+                      : "border border-slate-200 bg-white text-[#1E3A8A] hover:border-[#1D4ED8]/40 hover:bg-blue-50/50"
+                  }`}
+                >
+                  <span>{tab}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${
+                      isSelected
+                        ? "bg-[#F5A623]/20 text-[#FCD34D]"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {count}
                   </span>
-                  <span>{transportLabels[detailsJourney.transport_mode] || detailsJourney.transport_mode}</span>
-                </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <span className="text-xs font-semibold text-slate-500 sm:text-sm">
+            Showing {filteredJourneys.length} of {journeys.length} trips
+          </span>
+        </div>
+
+        {/* Journey Cards List */}
+        <div className="p-5 sm:p-6">
+          {filteredJourneys.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/40 p-8 text-center">
+              <p className="text-base font-bold text-[#0F2952]">
+                No {activeFilter.toLowerCase()} journeys found
+              </p>
+              <p className="mt-1.5 text-sm text-slate-600">
+                Switch filter tabs or plan a new protected journey for{" "}
+                {travellerName}.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              {filteredJourneys.map((journey) => (
+                <article
+                  key={journey.id}
+                  className="group flex flex-col justify-between rounded-2xl border border-[#1D4ED8]/15 bg-white p-5 shadow-2xs transition-all hover:-translate-y-0.5 hover:border-[#F5A623] hover:shadow-md sm:p-6"
+                >
+                  <div>
+                    {/* Top Row: Mode Tag & Status Badge */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2952] px-3 py-1 text-xs font-extrabold tracking-wider text-[#F5A623] uppercase">
+                        <span aria-hidden="true">🚘</span>
+                        <span>{journey.mode}</span>
+                      </span>
+
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${statusBadgeStyle(
+                          journey.status
+                        )}`}
+                      >
+                        <span aria-hidden="true">
+                          {journey.status === "Completed"
+                            ? "✅"
+                            : journey.status === "Active"
+                              ? "🟢"
+                              : journey.status === "Upcoming"
+                                ? "⏳"
+                                : "⚪"}
+                        </span>
+                        <span>{journey.status}</span>
+                      </span>
+                    </div>
+
+                    {/* Journey Title */}
+                    <h3 className="mt-3.5 text-lg font-extrabold tracking-tight text-[#0F2952] group-hover:text-[#1D4ED8]">
+                      {journey.title}
+                    </h3>
+
+                    {/* FROM -> TO Visual Route Box */}
+                    <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-blue-100 bg-gradient-to-r from-[#F4F8FF] via-white to-[#FFFBEB] p-3.5 sm:grid-cols-2">
+                      {/* FROM */}
+                      <div className="space-y-1">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-extrabold tracking-wider text-[#1D4ED8] uppercase">
+                          <span aria-hidden="true">📍</span>
+                          <span>FROM</span>
+                        </span>
+                        <p className="text-sm font-extrabold text-[#0F2952] sm:text-base">
+                          {journey.fromCity}
+                        </p>
+                        {journey.fromAddress && (
+                          <p className="text-xs font-medium text-slate-600 sm:text-sm">
+                            {journey.fromAddress}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* TO */}
+                      <div className="space-y-1 border-t border-blue-100 pt-2.5 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-3.5">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-extrabold tracking-wider text-[#B45309] uppercase">
+                          <span aria-hidden="true">🏁</span>
+                          <span>TO</span>
+                        </span>
+                        <p className="text-sm font-extrabold text-[#0F2952] sm:text-base">
+                          {journey.toCity}
+                        </p>
+                        {journey.toAddress && (
+                          <p className="text-xs font-medium text-slate-600 sm:text-sm">
+                            {journey.toAddress}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Departure (GREEN) & Arrival Timestamps */}
+                    <div className="mt-4 flex flex-col gap-2.5 text-sm">
+                      {/* Green Departure Pill */}
+                      <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/90 px-3.5 py-2 font-bold text-emerald-700">
+                        <span aria-hidden="true">🛫</span>
+                        <span>Departure:</span>
+                        <span className="text-emerald-800">
+                          {journey.departure}
+                        </span>
+                      </div>
+
+                      {/* Arrival Pill */}
+                      <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-3.5 py-2 font-semibold text-[#1E3A8A]">
+                        <span aria-hidden="true">🛬</span>
+                        <span>Arrival:</span>
+                        <span className="text-slate-600">
+                          {journey.arrival}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Trip Purpose / Note */}
+                    <div className="mt-3.5 flex items-start gap-2 rounded-xl border border-amber-200/60 bg-amber-50/50 px-3.5 py-2.5 text-sm font-medium text-[#0F2952]">
+                      <span aria-hidden="true">📝</span>
+                      <span>{journey.note}</span>
+                    </div>
+                  </div>
+
+                  {/* Card Footer Action */}
+                  <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3.5">
+                    <span className="text-xs font-semibold text-emerald-700 sm:text-sm">
+                      🛡️ TSC Covered
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedJourney(journey)}
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#0F2952] px-4 py-2 text-sm font-extrabold text-[#F5A623] transition-all hover:bg-[#1D4ED8] hover:text-white"
+                    >
+                      <span>View details</span>
+                      <span aria-hidden="true">→</span>
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {/* Safety Advisory Banner */}
+          <div
+            role="note"
+            className="mt-6 flex items-start gap-3 rounded-2xl border border-amber-300/70 bg-gradient-to-r from-amber-50 via-[#FFFBEB] to-blue-50/50 p-4 text-sm text-[#0F2952]"
+          >
+            <span aria-hidden="true" className="text-lg">
+              🚨
+            </span>
+            <p className="leading-relaxed font-medium text-[#0F2952]">
+              <strong className="font-extrabold text-[#B45309]">
+                Safety Advisory:
+              </strong>{" "}
+              TSC journey management supports your travel planning. For
+              immediate danger or urgent assistance, contact the appropriate
+              local emergency services.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* VIEW DETAILS MODAL */}
+      {selectedJourney && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={selectedJourney.title}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#06132A]/60 p-4 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[#F5A623]/40 bg-white shadow-2xl">
+            <div className="flex items-center justify-between bg-[#0F2952] px-5 py-4 text-white">
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true" className="text-base">
+                  🧭
+                </span>
+                <h3 className="text-base font-extrabold text-[#F5A623]">
+                  {selectedJourney.title}
+                </h3>
               </div>
               <button
                 type="button"
-                className="tsc-icon-button"
-                onClick={() => setDetailsJourney(null)}
-                aria-label="Close journey details"
+                onClick={() => setSelectedJourney(null)}
+                className="cursor-pointer rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold text-white hover:bg-[#F5A623] hover:text-[#0F2952]"
               >
-                ×
+                ✕
               </button>
-            </header>
-
-            <div className="tsc-mobile-match-content">
-              <section className="tsc-mobile-match-route">
-                <div className="tsc-mobile-match-section-title">
-                  <span className="tsc-mobile-match-icon">↗</span>
-                  <div>
-                    <span>YOUR JOURNEY</span>
-                    <h3>Route information</h3>
-                  </div>
-                </div>
-
-                <div className="tsc-mobile-match-route-point">
-                  <span className="tsc-mobile-match-dot origin" />
-                  <div>
-                    <small>FROM</small>
-                    <strong>{detailsJourney.origin_name}</strong>
-                    <p>{detailsJourney.origin_address || "No address provided"}</p>
-                  </div>
-                </div>
-
-                <div className="tsc-mobile-match-route-line" />
-
-                <div className="tsc-mobile-match-route-point">
-                  <span className="tsc-mobile-match-dot destination" />
-                  <div>
-                    <small>TO</small>
-                    <strong>{detailsJourney.destination_name}</strong>
-                    <p>{detailsJourney.destination_address || "No address provided"}</p>
-                  </div>
-                </div>
-              </section>
-
-              <section className="tsc-mobile-match-card">
-                <div className="tsc-mobile-match-section-title">
-                  <span className="tsc-mobile-match-icon">◷</span>
-                  <div>
-                    <span>TRAVEL DETAILS</span>
-                    <h3>Schedule and travel</h3>
-                  </div>
-                </div>
-
-                <div className="tsc-mobile-match-info-grid">
-                  <div>
-                    <small>Departure</small>
-                    <strong>{displayDate(detailsJourney.departure_at, detailsJourney.departure_timezone)}</strong>
-                    <p>{detailsJourney.departure_timezone || "Time zone not recorded"}</p>
-                  </div>
-                  <div>
-                    <small>Expected arrival</small>
-                    <strong>{displayDate(detailsJourney.expected_arrival_at, detailsJourney.arrival_timezone)}</strong>
-                    <p>{detailsJourney.arrival_timezone || "Time zone not recorded"}</p>
-                  </div>
-                  <div>
-                    <small>Transport</small>
-                    <strong>{transportLabels[detailsJourney.transport_mode] || detailsJourney.transport_mode}</strong>
-                  </div>
-                  <div>
-                    <small>Journey started</small>
-                    <strong>{displayDate(detailsJourney.started_at)}</strong>
-                  </div>
-                  <div>
-                    <small>Journey completed</small>
-                    <strong>{displayDate(detailsJourney.completed_at)}</strong>
-                  </div>
-                </div>
-              </section>
-
-              {detailsJourney.notes && (
-                <section className="tsc-mobile-match-card">
-                  <div className="tsc-mobile-match-section-title">
-                    <span className="tsc-mobile-match-icon">✎</span>
-                    <div>
-                      <span>TRAVELLER INFORMATION</span>
-                      <h3>Additional notes</h3>
-                    </div>
-                  </div>
-                  <p className="tsc-mobile-match-notes">{detailsJourney.notes}</p>
-                </section>
-              )}
-
-              {detailsJourney.status === "active" && (
-                <JourneyTravellerGpsPanel
-                  journey={detailsJourney}
-                  onUpdated={(enabled, consentAt) => {
-                    setDetailsJourney((current) =>
-                      current
-                        ? {
-                            ...current,
-                            location_sharing_enabled: enabled,
-                            ...(consentAt
-                              ? { location_sharing_consent_at: consentAt }
-                              : {}),
-                          }
-                        : current
-                    );
-                    void loadJourneys();
-                  }}
-                />
-              )}
             </div>
 
-            <footer className="tsc-mobile-match-footer">
-              <button
-                type="button"
-                className="tsc-button tsc-button-light"
-                onClick={() => setDetailsJourney(null)}
-              >
-                Close details
-              </button>
+            <div className="space-y-3.5 p-5 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-500">Mode</span>
+                <span className="font-extrabold text-[#0F2952]">
+                  {selectedJourney.mode}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-500">Status</span>
+                <span
+                  className={`rounded-full border px-3 py-0.5 text-xs font-bold ${statusBadgeStyle(
+                    selectedJourney.status
+                  )}`}
+                >
+                  {selectedJourney.status}
+                </span>
+              </div>
+              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3.5">
+                <p className="font-bold text-[#1D4ED8]">
+                  📍 From: {selectedJourney.fromCity}
+                  {selectedJourney.fromAddress
+                    ? ` (${selectedJourney.fromAddress})`
+                    : ""}
+                </p>
+                <p className="mt-1.5 font-bold text-[#B45309]">
+                  🏁 To: {selectedJourney.toCity}
+                  {selectedJourney.toAddress
+                    ? ` (${selectedJourney.toAddress})`
+                    : ""}
+                </p>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 font-bold text-emerald-700">
+                🛫 Departure: {selectedJourney.departure}
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 font-semibold text-[#1E3A8A]">
+                🛬 Arrival: {selectedJourney.arrival}
+              </div>
+              <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-[#0F2952]">
+                <strong className="block text-xs tracking-wider text-[#B45309] uppercase">
+                  Trip Purpose
+                </strong>
+                <p className="mt-1 font-medium">{selectedJourney.note}</p>
+              </div>
 
-              {detailsJourney.status === "draft" && (
-                <>
-                  <button
-                    type="button"
-                    className="tsc-button tsc-button-light"
-                    onClick={() => {
-                      const journey = detailsJourney;
-                      setDetailsJourney(null);
-                      editJourney(journey);
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="tsc-button tsc-button-primary"
-                    disabled={saving}
-                    onClick={() => void changeStatus(detailsJourney, "scheduled")}
-                  >
-                    Schedule journey
-                  </button>
-                  <button
-                    type="button"
-                    className="tsc-button tsc-button-danger"
-                    disabled={saving}
-                    onClick={() => void changeStatus(detailsJourney, "cancelled")}
-                  >
-                    Cancel
-                  </button>
-                </>
-              )}
-
-              {detailsJourney.status === "scheduled" && (
-                <>
-                  <button
-                    type="button"
-                    className="tsc-button tsc-button-light"
-                    onClick={() => {
-                      const journey = detailsJourney;
-                      setDetailsJourney(null);
-                      editJourney(journey);
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="tsc-button tsc-button-primary"
-                    disabled={saving}
-                    onClick={() => void changeStatus(detailsJourney, "active")}
-                  >
-                    Start journey
-                  </button>
-                  <button
-                    type="button"
-                    className="tsc-button tsc-button-danger"
-                    disabled={saving}
-                    onClick={() => void changeStatus(detailsJourney, "cancelled")}
-                  >
-                    Cancel
-                  </button>
-                </>
-              )}
-
-              {detailsJourney.status === "active" && (
-                <>
-                  <button
-                    type="button"
-                    className="tsc-button tsc-button-primary"
-                    disabled={saving}
-                    onClick={() => void changeStatus(detailsJourney, "completed")}
-                  >
-                    Complete journey
-                  </button>
-                  <button
-                    type="button"
-                    className="tsc-button tsc-button-danger"
-                    disabled={saving}
-                    onClick={() => void changeStatus(detailsJourney, "cancelled")}
-                  >
-                    Cancel
-                  </button>
-                </>
-              )}
-            </footer>
-          </section>
+              <div className="pt-2 text-right">
+                <button
+                  type="button"
+                  onClick={() => setSelectedJourney(null)}
+                  className="cursor-pointer rounded-xl bg-[#0F2952] px-4 py-2 text-sm font-extrabold text-[#F5A623] hover:bg-[#1D4ED8] hover:text-white"
+                >
+                  Close details
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      <p className="tsc-safety-note">
-        TSC journey management supports your travel planning. For immediate
-        danger or urgent assistance, contact the appropriate local emergency services.
-      </p>
+      {/* PLAN NEW JOURNEY MODAL */}
+      {isModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Plan a new journey"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#06132A]/60 p-4 backdrop-blur-xs"
+        >
+          <form
+            onSubmit={handleCreateJourney}
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-[#F5A623]/40 bg-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between bg-[#0F2952] px-5 py-4 text-white">
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true" className="text-base">
+                  ✈️
+                </span>
+                <h3 className="text-base font-extrabold text-[#F5A623]">
+                  Plan New Protected Journey
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="cursor-pointer rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold text-white hover:bg-[#F5A623] hover:text-[#0F2952]"
+              >
+                ✕
+              </button>
+            </div>
 
-      <footer className="tsc-page-footer">
-        <span>TRAVELLERS SAFETY COVERED</span>
-        <Link href="/dashboard">Return to dashboard</Link>
-      </footer>
+            <div className="space-y-3.5 p-5 text-sm">
+              <div>
+                <label className="mb-1 block font-bold text-[#0F2952]">
+                  Journey Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Business trip Abuja"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
+                />
+              </div>
 
-      <span className="sr-only" aria-hidden="true">{travellerName}</span>
-    </main>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block font-bold text-[#1D4ED8]">
+                    From City *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Lagos"
+                    value={fromCity}
+                    onChange={(e) => setFromCity(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-[#1D4ED8]">
+                    From Address
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 12 Ajah"
+                    value={fromAddress}
+                    onChange={(e) => setFromAddress(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block font-bold text-[#B45309]">
+                    To City *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Abuja"
+                    value={toCity}
+                    onChange={(e) => setToCity(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-[#B45309]">
+                    To Address
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Wuse Zone 5"
+                    value={toAddress}
+                    onChange={(e) => setToAddress(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block font-bold text-emerald-700">
+                    🛫 Departure
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Nov 7, 2026, 10:23 AM"
+                    value={departure}
+                    onChange={(e) => setDeparture(e.target.value)}
+                    className="w-full rounded-xl border border-emerald-200 bg-emerald-50/40 px-3.5 py-2 text-sm font-semibold text-emerald-800 focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block font-bold text-[#1E3A8A]">
+                    🛬 Arrival
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Not specified"
+                    value={arrival}
+                    onChange={(e) => setArrival(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block font-bold text-[#0F2952]">
+                  Purpose / Note
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. I am going for a business trip"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="cursor-pointer rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="cursor-pointer rounded-xl bg-[#F5A623] px-4 py-2 text-sm font-extrabold text-[#0F2952] shadow-xs hover:bg-[#FBBF24]"
+                >
+                  Save Journey
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
   );
 }
