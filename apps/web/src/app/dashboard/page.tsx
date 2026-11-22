@@ -36,6 +36,7 @@ const services = [
     category: "PAYMENTS",
     title: "Payments",
     description: "Manage travel payments and review payment activity.",
+    href: "/dashboard/payments",
     image: "photo-1556742049-0cfed4f6a45d",
     accent: "#60A5FA",
   },
