@@ -10,33 +10,36 @@ export default function MobilePaymentCallbackPage() {
 
     if (!reference) return;
 
-    const url = `tsc://wallet-payment?reference=${encodeURIComponent(reference)}`;
-    setAppLink(url);
+    const intentLink =
+      `intent://wallet-payment?reference=${encodeURIComponent(reference)}` +
+      "#Intent;scheme=tsc;package=com.core1enterprisesolutions.tsc;end";
 
-    window.location.href = url;
+    setAppLink(intentLink);
+
+    const timer = window.setTimeout(() => {
+      window.location.href = intentLink;
+    }, 500);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-slate-950 p-6">
-      <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-xl">
+      <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center">
         <h1 className="text-2xl font-bold text-slate-900">
           Payment Successful
         </h1>
 
         <p className="mt-4 text-slate-600">
-          Returning to TSC to verify your payment.
+          Opening your TSC app to verify your payment.
         </p>
 
         <a
           href={appLink}
-          className="mt-7 flex w-full items-center justify-center rounded-xl bg-teal-700 px-6 py-4 font-bold text-white"
+          className="mt-7 block w-full rounded-xl bg-teal-700 px-6 py-4 font-bold text-white"
         >
           Return to TSC App
         </a>
-
-        <p className="mt-4 text-sm text-slate-500">
-          If TSC does not open automatically, tap the button above.
-        </p>
       </div>
     </main>
   );
