@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "My Payments | TSC",
