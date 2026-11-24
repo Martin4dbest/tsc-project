@@ -113,12 +113,10 @@ export default function Home() {
             </a>
             <a
               href="/register"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#071730] px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition-all hover:bg-[#102A54]"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#FBBF24] px-4 py-2.5 text-sm font-bold text-[#071730] shadow-xs transition-all hover:bg-[#F59E0B]"
             >
               <span>Get started</span>
-              <span aria-hidden="true" className="text-[#FBBF24]">
-                ↗
-              </span>
+              <span aria-hidden="true">↗</span>
             </a>
           </div>
 
@@ -179,7 +177,7 @@ export default function Home() {
             <div className="pt-2">
               <a
                 href="/register"
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#E98012] px-4 py-3 text-sm font-semibold text-white shadow-xs"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#FBBF24] px-4 py-3 text-sm font-bold text-[#071730] shadow-xs transition-colors hover:bg-[#F59E0B]"
               >
                 <span>Get started</span>
                 <span aria-hidden="true">↗</span>
@@ -207,13 +205,13 @@ export default function Home() {
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-12 lg:gap-12">
               {/* Left Copy */}
-              <div className="space-y-6 lg:col-span-7">
+              <div className="space-y-5 lg:col-span-7">
                 <div className="inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-[11px] font-semibold tracking-[0.14em] text-[#FBBF24] uppercase">
                   <span className="h-2 w-2 rounded-full bg-[#E98012]" />
                   <span>Smarter Journeys. Safer Experiences.</span>
                 </div>
 
-                <h1 className="text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">
+                <h1 className="text-2xl font-bold leading-snug tracking-tight text-white sm:text-3xl lg:text-4xl">
                   Every journey
                   <br />
                   deserves{" "}
@@ -222,7 +220,7 @@ export default function Home() {
                   </span>
                 </h1>
 
-                <p className="max-w-xl text-base leading-relaxed text-[#CBD5E1] sm:text-lg">
+                <p className="max-w-xl text-sm leading-relaxed text-[#CBD5E1] sm:text-base">
                   Travel with greater confidence. Travelers Safety Covered is
                   building accessible trip-safety services designed to help
                   travellers stay connected to support throughout their journeys.
@@ -231,7 +229,7 @@ export default function Home() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                   <a
                     href="/register"
-                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#E98012] px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#D5710A]"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#FBBF24] px-6 py-3.5 text-sm font-bold text-[#071730] shadow-sm transition-all hover:bg-[#F59E0B]"
                   >
                     <span>Explore TSC</span>
                     <span aria-hidden="true">→</span>
@@ -505,7 +503,7 @@ export default function Home() {
                   <div className="pt-2">
                     <a
                       href="mailto:core1enterprisesolutions@gmail.com"
-                      className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#E98012] px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#D5710A]"
+                      className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#FBBF24] px-6 py-3.5 text-sm font-bold text-[#071730] shadow-sm transition-colors hover:bg-[#F59E0B]"
                     >
                       <span>Contact our team</span>
                       <span aria-hidden="true">↗</span>
