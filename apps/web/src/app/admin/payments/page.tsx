@@ -1,4 +1,4 @@
-import { connection } from "next/server";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
@@ -63,8 +63,7 @@ function label(value: string) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-export default async function TravellerPaymentsPage() {
-  await connection();
+async function TravellerPaymentsContent() {
 
   const supabase = await createSupabaseServerClient();
 
@@ -372,5 +371,23 @@ export default async function TravellerPaymentsPage() {
         </footer>
       </div>
     </main>
+  );
+}
+export default function TravellerPaymentsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[#F4F7FB] px-4 py-10 text-[#172B42]">
+          <div className="mx-auto max-w-5xl rounded-2xl border border-[#E6ECF2] bg-white p-8 text-center shadow-sm">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[#E6ECF2] border-t-[#187B83]" />
+            <p className="mt-4 text-sm font-bold">
+              Loading payment records...
+            </p>
+          </div>
+        </main>
+      }
+    >
+      <TravellerPaymentsContent />
+    </Suspense>
   );
 }
