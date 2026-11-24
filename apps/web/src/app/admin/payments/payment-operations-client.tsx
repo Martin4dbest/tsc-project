@@ -1,418 +1,321 @@
-"use client";
+import { connection } from "next/server";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-import { useMemo, useState } from "react";
+export const instant = false;
 
-type Payment = {
-  id: string;
-  traveller_id: string;
-  wallet_id: string | null;
-  wallet_transaction_id: string | null;
-  provider: string;
-  purpose: string;
-  status: string;
-  amount_minor: number;
-  currency_code: string;
-  reference: string;
-  provider_transaction_id: string | null;
-  description: string | null;
-  metadata: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-  verified_at: string | null;
-  traveller_name: string;
-  traveller_phone: string;
+export const metadata = {
+  title: "My Payments | TSC",
+  description: "View your TSC payment records and payment activity.",
 };
 
-const money = (amount: number, currency: string) =>
-  new Intl.NumberFormat("en-NG", {
+function money(amount: number, currency = "NGN") {
+  return new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency,
-    maximumFractionDigits: 2,
-  }).format(Number(amount) / 100);
+    minimumFractionDigits: 2,
+  }).format(amount / 100);
+}
 
-const dateTime = (value: string | null) => {
-  if (!value) return "—";
-
-  return new Intl.DateTimeFormat("en-NG", {
-    dateStyle: "medium",
-    timeStyle: "short",
+function dateLabel(value: string) {
+  return new Date(value).toLocaleString("en-NG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
     timeZone: "Africa/Lagos",
-  }).format(new Date(value));
-};
+  });
+}
 
-const statusStyle: Record<string, string> = {
-  succeeded: "bg-emerald-100 text-emerald-800",
-  pending: "bg-amber-100 text-amber-800",
-  failed: "bg-red-100 text-red-800",
-  refunded: "bg-slate-200 text-slate-700",
-};
+function statusStyle(status: string) {
+  switch (status) {
+    case "succeeded":
+      return "bg-emerald-500/10 text-emerald-700 ring-1 ring-inset ring-emerald-500/25";
+    case "pending":
+      return "bg-amber-500/10 text-amber-700 ring-1 ring-inset ring-amber-500/25";
+    case "failed":
+      return "bg-red-500/10 text-red-700 ring-1 ring-inset ring-red-500/25";
+    case "refunded":
+      return "bg-slate-500/10 text-slate-700 ring-1 ring-inset ring-slate-500/20";
+    default:
+      return "bg-slate-500/10 text-slate-600 ring-1 ring-inset ring-slate-500/20";
+  }
+}
 
-export default function PaymentOperationsClient({
-  payments,
-}: {
-  payments: Payment[];
-}) {
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("all");
-  const [purpose, setPurpose] = useState("all");
-  const [provider, setProvider] = useState("all");
-  const [selected, setSelected] = useState<Payment | null>(null);
+function label(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
 
-  const stats = useMemo(() => {
-    const succeeded = payments.filter((p) => p.status === "succeeded");
+export default async function TravellerPaymentsPage() {
+  await connection();
 
-    return {
-      total: payments.length,
-      succeeded: succeeded.length,
-      pending: payments.filter((p) => p.status === "pending").length,
-      failed: payments.filter((p) => p.status === "failed").length,
-      refunded: payments.filter((p) => p.status === "refunded").length,
-      successfulValue: succeeded.reduce(
-        (sum, p) => sum + Number(p.amount_minor),
-        0
-      ),
-    };
-  }, [payments]);
+  const supabase = await createSupabaseServerClient();
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-    return payments.filter((p) => {
-      const matchesSearch =
-        !term ||
-        p.reference.toLowerCase().includes(term) ||
-        p.traveller_name.toLowerCase().includes(term) ||
-        p.traveller_phone.toLowerCase().includes(term) ||
-        (p.provider_transaction_id ?? "").toLowerCase().includes(term);
+  if (!user) redirect("/login");
 
-      return (
-        matchesSearch &&
-        (status === "all" || p.status === status) &&
-        (purpose === "all" || p.purpose === purpose) &&
-        (provider === "all" || p.provider === provider)
-      );
-    });
-  }, [payments, search, status, purpose, provider]);
+  const { data: payments, error } = await supabase
+    .from("tsc_payment_records")
+    .select(
+      "id, amount_minor, currency_code, provider, purpose, status, reference, provider_transaction_id, description, created_at, verified_at"
+    )
+    .eq("traveller_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(100);
 
-  const exportCsv = () => {
-    const headers = [
-      "Reference",
-      "Traveller",
-      "Phone",
-      "Amount",
-      "Currency",
-      "Provider",
-      "Purpose",
-      "Status",
-      "Provider Transaction ID",
-      "Created At",
-      "Verified At",
-    ];
+  const records = payments ?? [];
 
-    const rows = filtered.map((p) => [
-      p.reference,
-      p.traveller_name,
-      p.traveller_phone,
-      (Number(p.amount_minor) / 100).toFixed(2),
-      p.currency_code,
-      p.provider,
-      p.purpose,
-      p.status,
-      p.provider_transaction_id ?? "",
-      p.created_at,
-      p.verified_at ?? "",
-    ]);
+  const successful = records.filter(
+    (payment) => payment.status === "succeeded"
+  );
 
-    const escapeCsv = (value: string) =>
-      `"${String(value).replace(/"/g, '""')}"`;
+  const pending = records.filter(
+    (payment) => payment.status === "pending"
+  );
 
-    const csv = [headers, ...rows]
-      .map((row) => row.map((value) => escapeCsv(String(value))).join(","))
-      .join("\n");
-
-    const blob = new Blob([csv], {
-      type: "text/csv;charset=utf-8;",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `tsc-payment-records-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const cardClass =
-    "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
+  const successfulValue = successful.reduce(
+    (total, payment) => total + Number(payment.amount_minor),
+    0
+  );
 
   return (
-    <div className="mt-8 space-y-6">
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <div className={cardClass}>
-          <p className="text-sm text-slate-500">Total payment records</p>
-          <p className="mt-2 text-3xl font-bold text-slate-900">
-            {stats.total.toLocaleString("en-NG")}
-          </p>
-        </div>
-
-        <div className={cardClass}>
-          <p className="text-sm text-slate-500">Successful payments</p>
-          <p className="mt-2 text-3xl font-bold text-emerald-700">
-            {stats.succeeded.toLocaleString("en-NG")}
-          </p>
-          <p className="mt-1 text-sm text-slate-500">
-            {money(stats.successfulValue, "NGN")} received
-          </p>
-        </div>
-
-        <div className={cardClass}>
-          <p className="text-sm text-slate-500">Pending payments</p>
-          <p className="mt-2 text-3xl font-bold text-amber-600">
-            {stats.pending.toLocaleString("en-NG")}
-          </p>
-        </div>
-
-        <div className={cardClass}>
-          <p className="text-sm text-slate-500">Failed payments</p>
-          <p className="mt-2 text-3xl font-bold text-red-600">
-            {stats.failed.toLocaleString("en-NG")}
-          </p>
-        </div>
-
-        <div className={cardClass}>
-          <p className="text-sm text-slate-500">Refunded payments</p>
-          <p className="mt-2 text-3xl font-bold text-slate-700">
-            {stats.refunded.toLocaleString("en-NG")}
-          </p>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+    <main className="tsc-dashboard-content min-h-screen bg-[#F4F7FB] px-4 py-6 sm:px-7 sm:py-8">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <header className="flex flex-col justify-between gap-4 border-b border-[#E6ECF2] pb-5 sm:flex-row sm:items-center">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">
-              Transaction records
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Search and review payment activity.
-            </p>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#e98012]" />
+              <span className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#187B83]">
+                Traveller Payment Centre
+              </span>
+            </div>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-[#102D50] sm:text-3xl">
+              My Payments
+            </h1>
           </div>
 
-          <button
-            type="button"
-            onClick={exportCsv}
-            className="rounded-xl bg-[#174D78] px-5 py-3 text-sm font-semibold text-white hover:bg-[#102D50]"
-          >
-            Export CSV
-          </button>
-        </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Link
+              href="/dashboard/wallet"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#174D78] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#102D50]"
+            >
+              <span>Open My Wallet</span>
+              <span aria-hidden="true">→</span>
+            </Link>
+            <Link
+              href="/dashboard"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#E6ECF2] bg-white px-4 py-2.5 text-sm font-bold text-[#172B42] shadow-sm transition hover:border-[#187B83]/40 hover:bg-[#F0F5F9]"
+            >
+              Back to dashboard
+            </Link>
+          </div>
+        </header>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search traveller, phone or reference..."
-            className="min-w-0 rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-600 md:col-span-2"
-          />
-
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
-          >
-            <option value="all">All statuses</option>
-            <option value="succeeded">Successful</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
-            <option value="refunded">Refunded</option>
-          </select>
-
-          <select
-            value={purpose}
-            onChange={(e) => setPurpose(e.target.value)}
-            className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
-          >
-            <option value="all">All purposes</option>
-            <option value="wallet_funding">Wallet funding</option>
-            <option value="service_payment">Service payment</option>
-            <option value="booking_payment">Booking payment</option>
-            <option value="refund">Refund</option>
-          </select>
-
-          <select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-            className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
-          >
-            <option value="all">All providers</option>
-            <option value="paystack">Paystack</option>
-            <option value="wallet">Wallet</option>
-            <option value="admin">Admin</option>
-            <option value="manual">Manual</option>
-          </select>
-        </div>
-
-        <p className="mt-4 text-sm text-slate-500">
-          Showing {filtered.length} of {payments.length} loaded records
-        </p>
-      </section>
-
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1050px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-5 py-4">Traveller</th>
-                <th className="px-5 py-4">Reference</th>
-                <th className="px-5 py-4">Amount</th>
-                <th className="px-5 py-4">Provider</th>
-                <th className="px-5 py-4">Purpose</th>
-                <th className="px-5 py-4">Status</th>
-                <th className="px-5 py-4">Date</th>
-                <th className="px-5 py-4">Details</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50">
-                  <td className="px-5 py-4">
-                    <p className="font-semibold text-slate-900">
-                      {p.traveller_name}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {p.traveller_phone || "No phone recorded"}
-                    </p>
-                  </td>
-                  <td className="px-5 py-4 font-mono text-xs text-slate-700">
-                    {p.reference}
-                  </td>
-                  <td className="px-5 py-4 font-semibold text-slate-900">
-                    {money(Number(p.amount_minor), p.currency_code)}
-                  </td>
-                  <td className="px-5 py-4 capitalize">{p.provider}</td>
-                  <td className="px-5 py-4 text-slate-700">
-                    {p.purpose.replaceAll("_", " ")}
-                  </td>
-                  <td className="px-5 py-4">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
-                        statusStyle[p.status] ?? "bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {p.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-xs text-slate-600">
-                    {dateTime(p.created_at)}
-                  </td>
-                  <td className="px-5 py-4">
-                    <button
-                      type="button"
-                      onClick={() => setSelected(p)}
-                      className="font-semibold text-blue-700 hover:underline"
-                    >
-                      View
-                    </button>
-                  </td>
-                </tr>
-              ))}
-
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-slate-500">
-                    No payment records match your search.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {selected && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
-          onClick={() => setSelected(null)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="payment-detail-title"
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
+        <section className="rounded-3xl bg-gradient-to-br from-[#102D50] via-[#133B63] to-[#174D78] p-5 text-white shadow-md sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4 sm:items-center">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-lg font-black text-white ring-1 ring-white/20">
+                ₦
+              </div>
               <div>
-                <h2 id="payment-detail-title" className="text-xl font-bold text-slate-900">
-                  Payment details
+                <h2 className="text-lg font-extrabold tracking-tight text-white">
+                  Your payment activity
                 </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Complete transaction record
+                <p className="mt-1 max-w-2xl text-xs leading-5 text-[#DCE8F4] sm:text-sm sm:leading-6">
+                  Review your TSC payment records, transaction references, and
+                  payment statuses in one organized view.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                aria-label="Close payment details"
-                className="rounded-lg px-3 py-2 text-xl text-slate-500 hover:bg-slate-100"
-              >
-                ×
-              </button>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {[
-                ["Traveller", selected.traveller_name],
-                ["Phone", selected.traveller_phone || "Not recorded"],
-                ["Amount", money(Number(selected.amount_minor), selected.currency_code)],
-                ["Status", selected.status],
-                ["Provider", selected.provider],
-                ["Purpose", selected.purpose.replaceAll("_", " ")],
-                ["Reference", selected.reference],
-                ["Provider transaction ID", selected.provider_transaction_id ?? "Not available"],
-                ["Wallet ID", selected.wallet_id ?? "Not linked"],
-                ["Wallet transaction ID", selected.wallet_transaction_id ?? "Not credited"],
-                ["Created", dateTime(selected.created_at)],
-                ["Last updated", dateTime(selected.updated_at)],
-                ["Verified", dateTime(selected.verified_at)],
-              ].map(([label, value]) => (
-                <div key={label} className="min-w-0 rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    {label}
-                  </p>
-                  <p className="mt-2 break-all text-sm font-semibold text-slate-900">
-                    {value}
-                  </p>
-                </div>
-              ))}
+            <Link
+              href="/dashboard/wallet"
+              className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#187B83] px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white transition hover:bg-[#14686f] sm:text-sm sm:normal-case sm:tracking-normal"
+            >
+              Fund Wallet
+            </Link>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <div className="grid grid-cols-3 gap-3 lg:col-span-7 lg:gap-4">
+            <div className="rounded-2xl border border-[#E6ECF2] bg-white p-4 shadow-xs sm:p-5">
+              <p className="text-xs font-semibold text-[#718096]">
+                Total records
+              </p>
+              <p className="mt-2.5 text-2xl font-black tabular-nums text-[#102D50] sm:text-3xl">
+                {records.length}
+              </p>
             </div>
 
-            {selected.description && (
-              <div className="mt-4 rounded-xl bg-slate-50 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Description
-                </p>
-                <p className="mt-2 text-sm text-slate-800">
-                  {selected.description}
-                </p>
-              </div>
-            )}
+            <div className="rounded-2xl border border-[#E6ECF2] bg-white p-4 shadow-xs sm:p-5">
+              <p className="text-xs font-semibold text-[#718096]">
+                Successful
+              </p>
+              <p className="mt-2.5 text-2xl font-black tabular-nums text-emerald-600 sm:text-3xl">
+                {successful.length}
+              </p>
+            </div>
 
-            <div className="mt-6 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                className="rounded-xl bg-[#174D78] px-5 py-3 text-sm font-semibold text-white hover:bg-[#102D50]"
-              >
-                Close
-              </button>
+            <div className="rounded-2xl border border-[#E6ECF2] bg-white p-4 shadow-xs sm:p-5">
+              <p className="text-xs font-semibold text-[#718096]">
+                Pending
+              </p>
+              <p className="mt-2.5 text-2xl font-black tabular-nums text-amber-600 sm:text-3xl">
+                {pending.length}
+              </p>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+
+          <div className="flex items-center justify-between rounded-2xl border border-[#E6ECF2] bg-white p-4 shadow-xs sm:p-5 lg:col-span-5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#718096]">
+                Successful Payment Value
+              </p>
+              <p className="mt-2 truncate text-xl font-black tabular-nums text-emerald-600 sm:text-2xl">
+                {money(successfulValue)}
+              </p>
+            </div>
+
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-base font-black text-emerald-600">
+              ✓
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-[#E6ECF2] bg-white p-5 shadow-xs sm:p-7">
+          <div className="flex flex-col justify-between gap-2 border-b border-[#E6ECF2] pb-4 sm:flex-row sm:items-end">
+            <div>
+              <h2 className="text-lg font-black text-[#102D50] sm:text-xl">
+                Payment history
+              </h2>
+              <p className="mt-0.5 text-xs text-[#718096] sm:text-sm">
+                Your latest 100 payment records
+              </p>
+            </div>
+            <span className="text-xs font-extrabold uppercase tracking-wider text-[#187B83]">
+              {records.length} {records.length === 1 ? "record" : "records"}
+            </span>
+          </div>
+
+          {error ? (
+            <div className="mt-6 rounded-2xl border border-red-200 bg-red-50/80 p-6 text-center">
+              <h3 className="text-base font-extrabold text-red-900">
+                Payment history unavailable
+              </h3>
+              <p className="mx-auto mt-1.5 max-w-md text-xs leading-5 text-red-700 sm:text-sm">
+                We could not load your payment history. Please refresh the page
+                and try again.
+              </p>
+            </div>
+          ) : records.length === 0 ? (
+            <div className="mt-6 rounded-2xl border border-dashed border-[#DCE5EE] bg-[#F8FAFC] px-5 py-12 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#187B83]/10 text-xl font-black text-[#187B83]">
+                ₦
+              </div>
+              <h3 className="mt-4 text-base font-black text-[#102D50] sm:text-lg">
+                No payment records yet
+              </h3>
+              <p className="mx-auto mt-1.5 max-w-md text-xs leading-5 text-[#718096] sm:text-sm sm:leading-6">
+                Payments you make through TSC will appear here with their
+                references and transaction statuses.
+              </p>
+              <Link
+                href="/dashboard/wallet"
+                className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#102D50] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#174D78]"
+              >
+                Go to My Wallet
+              </Link>
+            </div>
+          ) : (
+            <div className="mt-5 space-y-3.5">
+              {records.map((payment) => (
+                <article
+                  key={payment.id}
+                  className="rounded-2xl border border-[#E6ECF2] bg-white p-4 transition hover:border-[#187B83]/40 hover:shadow-xs sm:p-5"
+                >
+                  <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-extrabold ${statusStyle(payment.status)}`}
+                      >
+                        {label(payment.status)}
+                      </span>
+                      <span className="rounded-md bg-[#F0F5F9] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#718096]">
+                        {label(payment.provider)}
+                      </span>
+                    </div>
+
+                    <p className="text-xs font-medium text-[#718096] sm:text-right">
+                      {dateLabel(payment.created_at)}
+                    </p>
+                  </div>
+
+                  <div className="mt-3.5 flex flex-col justify-between gap-1 sm:flex-row sm:items-baseline">
+                    <h3 className="text-xl font-black tabular-nums text-[#102D50] sm:text-2xl">
+                      {money(
+                        Number(payment.amount_minor),
+                        payment.currency_code
+                      )}
+                    </h3>
+                    <p className="text-xs font-extrabold text-[#187B83] sm:text-sm">
+                      {label(payment.purpose)}
+                    </p>
+                  </div>
+
+                  {payment.description && (
+                    <p className="mt-2 text-xs leading-5 text-[#718096] sm:text-sm">
+                      {payment.description}
+                    </p>
+                  )}
+
+                  <div className="mt-4 grid grid-cols-1 gap-3 border-t border-[#E6ECF2] pt-3.5 sm:grid-cols-2">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#718096]">
+                        Payment reference
+                      </p>
+                      <p className="mt-1 select-all break-all font-mono text-xs font-semibold text-[#172B42] sm:text-[13px]">
+                        {payment.reference}
+                      </p>
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#718096]">
+                        Provider transaction ID
+                      </p>
+                      <p className="mt-1 select-all break-all font-mono text-xs font-semibold text-[#172B42] sm:text-[13px]">
+                        {payment.provider_transaction_id ||
+                          "Not yet available"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {payment.verified_at && (
+                    <div className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                      <span aria-hidden="true">✓</span>
+                      <span>Verified {dateLabel(payment.verified_at)}</span>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <footer className="pt-2 text-center text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#718096]">
+          <p>Travellers Safety Covered</p>
+          <p className="mt-1 font-semibold normal-case tracking-normal text-[#718096]">
+            Your safety. Our priority.
+          </p>
+        </footer>
+      </div>
+    </main>
   );
 }

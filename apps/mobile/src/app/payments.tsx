@@ -31,6 +31,7 @@ type Payment = {
 const NAVY = "#102D50";
 const BLUE = "#174D78";
 const TEAL = "#187B83";
+const ORANGE = "#E98012";
 const PAGE = "#F4F7FB";
 const INK = "#172B42";
 const MUTED = "#718096";
@@ -78,43 +79,46 @@ export default function PaymentsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  const loadPayments = useCallback(async (quiet = false) => {
-    if (quiet) setRefreshing(true);
-    else setLoading(true);
+  const loadPayments = useCallback(
+    async (quiet = false) => {
+      if (quiet) setRefreshing(true);
+      else setLoading(true);
 
-    setError("");
+      setError("");
 
-    try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
 
-      if (sessionError || !session) {
-        router.replace("/login");
-        return;
+        if (sessionError || !session) {
+          router.replace("/login");
+          return;
+        }
+
+        const { data, error: paymentError } = await supabase
+          .from("tsc_payment_records")
+          .select(
+            "id, amount_minor, currency_code, provider, purpose, status, reference, provider_transaction_id, description, created_at, verified_at"
+          )
+          .eq("traveller_id", session.user.id)
+          .order("created_at", { ascending: false })
+          .limit(100);
+
+        if (paymentError) throw paymentError;
+
+        setPayments((data ?? []) as Payment[]);
+      } catch (err) {
+        console.error("Payment history loading failed:", err);
+        setError("We could not load your payment history. Please try again.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-
-      const { data, error: paymentError } = await supabase
-        .from("tsc_payment_records")
-        .select(
-          "id, amount_minor, currency_code, provider, purpose, status, reference, provider_transaction_id, description, created_at, verified_at"
-        )
-        .eq("traveller_id", session.user.id)
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      if (paymentError) throw paymentError;
-
-      setPayments((data ?? []) as Payment[]);
-    } catch (err) {
-      console.error("Payment history loading failed:", err);
-      setError("We could not load your payment history. Please try again.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [router]);
+    },
+    [router]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -151,11 +155,14 @@ export default function PaymentsScreen() {
           onPress={() => router.back()}
           accessibilityLabel="Go back"
         >
-          <Ionicons name="arrow-back" size={21} color={NAVY} />
+          <Ionicons name="arrow-back" size={20} color={NAVY} />
         </Pressable>
 
         <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>TRAVELLER PAYMENT CENTRE</Text>
+          <View style={styles.eyebrowRow}>
+            <View style={styles.eyebrowDot} />
+            <Text style={styles.eyebrow}>TRAVELLER PAYMENT CENTRE</Text>
+          </View>
           <Text style={styles.title}>My Payments</Text>
         </View>
 
@@ -164,7 +171,7 @@ export default function PaymentsScreen() {
           onPress={() => void loadPayments(true)}
           accessibilityLabel="Refresh payments"
         >
-          <Ionicons name="refresh-outline" size={21} color={NAVY} />
+          <Ionicons name="refresh-outline" size={20} color={NAVY} />
         </Pressable>
       </View>
 
@@ -186,26 +193,28 @@ export default function PaymentsScreen() {
           }
         >
           <View style={styles.introCard}>
-            <View style={styles.introIcon}>
-              <Ionicons name="receipt-outline" size={27} color="#FFFFFF" />
+            <View style={styles.introTop}>
+              <View style={styles.introIcon}>
+                <Text style={styles.introIconText}>₦</Text>
+              </View>
+              <View style={styles.introText}>
+                <Text style={styles.introTitle}>Your payment activity</Text>
+                <Text style={styles.introDescription}>
+                  Review your TSC payment records, transaction references, and
+                  payment statuses in one organized view.
+                </Text>
+              </View>
             </View>
-            <View style={styles.introText}>
-              <Text style={styles.introTitle}>Your payment activity</Text>
-              <Text style={styles.introDescription}>
-                Review your TSC payment records, transaction references and
-                payment statuses.
-              </Text>
-            </View>
-          </View>
 
-          <Pressable
-            style={styles.walletButton}
-            onPress={() => router.push("/wallet")}
-          >
-            <Ionicons name="wallet-outline" size={21} color="#FFFFFF" />
-            <Text style={styles.walletButtonText}>Open My Wallet</Text>
-            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-          </Pressable>
+            <Pressable
+              style={styles.walletButton}
+              onPress={() => router.push("/wallet")}
+            >
+              <Ionicons name="wallet-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.walletButtonText}>Open My Wallet</Text>
+              <Ionicons name="arrow-forward" size={17} color="#FFFFFF" />
+            </Pressable>
+          </View>
 
           <View style={styles.statsGrid}>
             <View style={styles.statCard}>
@@ -229,14 +238,12 @@ export default function PaymentsScreen() {
           </View>
 
           <View style={styles.valueCard}>
-            <View>
+            <View style={styles.valueTextWrap}>
               <Text style={styles.valueLabel}>SUCCESSFUL PAYMENT VALUE</Text>
-              <Text style={styles.valueAmount}>
-                {money(successfulValue)}
-              </Text>
+              <Text style={styles.valueAmount}>{money(successfulValue)}</Text>
             </View>
             <View style={styles.valueIcon}>
-              <Ionicons name="checkmark-done" size={23} color={GREEN} />
+              <Ionicons name="checkmark-done" size={22} color={GREEN} />
             </View>
           </View>
 
@@ -247,7 +254,9 @@ export default function PaymentsScreen() {
                 Your latest 100 payment records
               </Text>
             </View>
-            <Text style={styles.recordCount}>{payments.length} records</Text>
+            <Text style={styles.recordCount}>
+              {payments.length} {payments.length === 1 ? "record" : "records"}
+            </Text>
           </View>
 
           {error ? (
@@ -265,7 +274,7 @@ export default function PaymentsScreen() {
           ) : payments.length === 0 ? (
             <View style={styles.emptyCard}>
               <View style={styles.emptyIcon}>
-                <Ionicons name="receipt-outline" size={30} color={TEAL} />
+                <Text style={styles.emptyIconText}>₦</Text>
               </View>
               <Text style={styles.emptyTitle}>No payment records yet</Text>
               <Text style={styles.muted}>
@@ -280,78 +289,83 @@ export default function PaymentsScreen() {
               </Pressable>
             </View>
           ) : (
-            payments.map((payment) => (
-              <View key={payment.id} style={styles.paymentCard}>
-                <View style={styles.paymentTop}>
-                  <View style={styles.paymentHeading}>
-                    <Text
-                      style={[
-                        styles.status,
-                        {
-                          color: statusColor(payment.status),
-                          backgroundColor: `${statusColor(payment.status)}15`,
-                        },
-                      ]}
-                    >
-                      {label(payment.status)}
-                    </Text>
-                    <Text style={styles.provider}>
-                      {label(payment.provider)}
+            payments.map((payment) => {
+              const tone = statusColor(payment.status);
+              return (
+                <View key={payment.id} style={styles.paymentCard}>
+                  <View style={styles.paymentTop}>
+                    <View style={styles.paymentHeading}>
+                      <Text
+                        style={[
+                          styles.status,
+                          {
+                            color: tone,
+                            backgroundColor: `${tone}16`,
+                            borderColor: `${tone}35`,
+                          },
+                        ]}
+                      >
+                        {label(payment.status)}
+                      </Text>
+                      <Text style={styles.provider}>
+                        {label(payment.provider)}
+                      </Text>
+                    </View>
+                    <Text style={styles.paymentDate}>
+                      {dateLabel(payment.created_at)}
                     </Text>
                   </View>
-                  <Text style={styles.paymentDate}>
-                    {dateLabel(payment.created_at)}
+
+                  <View style={styles.amountRow}>
+                    <Text style={styles.paymentAmount}>
+                      {money(
+                        Number(payment.amount_minor),
+                        payment.currency_code
+                      )}
+                    </Text>
+                    <Text style={styles.purpose}>{label(payment.purpose)}</Text>
+                  </View>
+
+                  {!!payment.description && (
+                    <Text style={styles.description}>
+                      {payment.description}
+                    </Text>
+                  )}
+
+                  <View style={styles.detailDivider} />
+
+                  <Text style={styles.detailLabel}>Payment reference</Text>
+                  <Text selectable style={styles.reference}>
+                    {payment.reference}
                   </Text>
+
+                  <Text style={styles.detailLabel}>
+                    Provider transaction ID
+                  </Text>
+                  <Text selectable style={styles.reference}>
+                    {payment.provider_transaction_id || "Not yet available"}
+                  </Text>
+
+                  {!!payment.verified_at && (
+                    <View style={styles.verifiedRow}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={15}
+                        color={GREEN}
+                      />
+                      <Text style={styles.verifiedText}>
+                        Verified {dateLabel(payment.verified_at)}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-
-                <Text style={styles.paymentAmount}>
-                  {money(Number(payment.amount_minor), payment.currency_code)}
-                </Text>
-                <Text style={styles.purpose}>{label(payment.purpose)}</Text>
-
-                {!!payment.description && (
-                  <Text style={styles.description}>
-                    {payment.description}
-                  </Text>
-                )}
-
-                <View style={styles.detailDivider} />
-
-                <Text style={styles.detailLabel}>Payment reference</Text>
-                <Text selectable style={styles.reference}>
-                  {payment.reference}
-                </Text>
-
-                {!!payment.provider_transaction_id && (
-                  <>
-                    <Text style={styles.detailLabel}>
-                      Provider transaction ID
-                    </Text>
-                    <Text selectable style={styles.reference}>
-                      {payment.provider_transaction_id}
-                    </Text>
-                  </>
-                )}
-
-                {!!payment.verified_at && (
-                  <View style={styles.verifiedRow}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={15}
-                      color={GREEN}
-                    />
-                    <Text style={styles.verifiedText}>
-                      Verified {dateLabel(payment.verified_at)}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            ))
+              );
+            })
           )}
 
           <Text style={styles.footer}>
             TRAVELLERS SAFETY COVERED{"\n"}
-            Your safety. Our priority.
+            <Text style={styles.footerSub}>Your safety. Our priority.</Text>
           </Text>
         </ScrollView>
       )}
@@ -362,8 +376,8 @@ export default function PaymentsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: PAGE },
   header: {
-    minHeight: 72,
-    paddingHorizontal: 17,
+    minHeight: 74,
+    paddingHorizontal: 18,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",
@@ -375,18 +389,27 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 13,
     backgroundColor: "#F0F5F9",
+    borderWidth: 1,
+    borderColor: BORDER,
     alignItems: "center",
     justifyContent: "center",
   },
   headerText: { flex: 1, marginLeft: 12 },
+  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  eyebrowDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 99,
+    backgroundColor: ORANGE,
+  },
   eyebrow: {
     color: TEAL,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
     letterSpacing: 1.1,
   },
-  title: { color: NAVY, fontSize: 20, fontWeight: "900", marginTop: 3 },
-  content: { padding: 17, paddingBottom: 35 },
+  title: { color: NAVY, fontSize: 21, fontWeight: "900", marginTop: 2 },
+  content: { padding: 18, paddingBottom: 38 },
   center: {
     flex: 1,
     alignItems: "center",
@@ -396,8 +419,11 @@ const styles = StyleSheet.create({
   loadingText: { color: MUTED, fontSize: 13, fontWeight: "600" },
   introCard: {
     backgroundColor: NAVY,
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 18,
+    gap: 14,
+  },
+  introTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: 13,
@@ -406,24 +432,30 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 15,
-    backgroundColor: "#FFFFFF22",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
   },
+  introIconText: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "900",
+  },
   introText: { flex: 1 },
-  introTitle: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
+  introTitle: { color: "#FFFFFF", fontSize: 17, fontWeight: "800" },
   introDescription: {
     color: "#DCE8F4",
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: 5,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
   },
   walletButton: {
-    marginTop: 13,
-    minHeight: 51,
+    minHeight: 48,
     paddingHorizontal: 16,
     borderRadius: 14,
-    backgroundColor: BLUE,
+    backgroundColor: TEAL,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -437,66 +469,81 @@ const styles = StyleSheet.create({
   },
   statsGrid: {
     flexDirection: "row",
-    gap: 9,
-    marginTop: 15,
+    gap: 10,
+    marginTop: 14,
   },
   statCard: {
     flex: 1,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: BORDER,
-    borderRadius: 15,
-    padding: 12,
+    borderRadius: 16,
+    padding: 13,
   },
-  statLabel: { color: MUTED, fontSize: 10, fontWeight: "600" },
-  statValue: { color: NAVY, fontSize: 23, fontWeight: "900", marginTop: 8 },
+  statLabel: { color: MUTED, fontSize: 11, fontWeight: "600" },
+  statValue: {
+    color: NAVY,
+    fontSize: 22,
+    fontWeight: "900",
+    marginTop: 8,
+    fontVariant: ["tabular-nums"],
+  },
   valueCard: {
     marginTop: 12,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: BORDER,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 12,
   },
+  valueTextWrap: { flex: 1 },
   valueLabel: {
     color: MUTED,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
-    letterSpacing: 0.8,
+    letterSpacing: 0.9,
   },
   valueAmount: {
     color: GREEN,
     fontSize: 22,
     fontWeight: "900",
-    marginTop: 7,
+    marginTop: 6,
+    fontVariant: ["tabular-nums"],
   },
   valueIcon: {
-    width: 43,
-    height: 43,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     backgroundColor: "#E8F7EF",
     alignItems: "center",
     justifyContent: "center",
   },
   sectionHeader: {
-    marginTop: 25,
+    marginTop: 24,
     marginBottom: 12,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
   },
   sectionTitle: { color: NAVY, fontSize: 18, fontWeight: "900" },
-  sectionSubtitle: { color: MUTED, fontSize: 11, marginTop: 4 },
-  recordCount: { color: TEAL, fontSize: 10, fontWeight: "800" },
+  sectionSubtitle: { color: MUTED, fontSize: 12, marginTop: 3 },
+  recordCount: {
+    color: TEAL,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
   paymentCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 17,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: BORDER,
-    padding: 15,
+    padding: 16,
     marginBottom: 12,
   },
   paymentTop: {
@@ -515,35 +562,50 @@ const styles = StyleSheet.create({
   status: {
     overflow: "hidden",
     borderRadius: 20,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    fontSize: 9,
-    fontWeight: "900",
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontSize: 10,
+    fontWeight: "800",
   },
   provider: {
     color: MUTED,
-    fontSize: 9,
+    backgroundColor: "#F0F5F9",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    fontSize: 10,
     fontWeight: "800",
     textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   paymentDate: {
     color: MUTED,
-    fontSize: 9,
+    fontSize: 11,
+    fontWeight: "500",
     textAlign: "right",
     flexShrink: 1,
+  },
+  amountRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 8,
   },
   paymentAmount: {
     color: NAVY,
     fontSize: 22,
     fontWeight: "900",
-    marginTop: 14,
+    fontVariant: ["tabular-nums"],
   },
-  purpose: { color: TEAL, fontSize: 12, fontWeight: "800", marginTop: 4 },
+  purpose: { color: TEAL, fontSize: 12, fontWeight: "800" },
   description: {
     color: MUTED,
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: 7,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 6,
   },
   detailDivider: {
     height: 1,
@@ -552,31 +614,37 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     color: MUTED,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
     textTransform: "uppercase",
-    marginTop: 7,
+    letterSpacing: 0.7,
+    marginTop: 6,
   },
   reference: {
     color: INK,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
-    marginTop: 4,
+    marginTop: 3,
   },
   verifiedRow: {
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     marginTop: 12,
+    backgroundColor: "#E8F7EF",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
-  verifiedText: { color: GREEN, fontSize: 10, fontWeight: "700" },
+  verifiedText: { color: GREEN, fontSize: 11, fontWeight: "700" },
   emptyCard: {
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: BORDER,
-    borderRadius: 18,
-    padding: 25,
+    borderRadius: 20,
+    padding: 26,
   },
   emptyIcon: {
     width: 56,
@@ -586,35 +654,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  emptyIconText: {
+    color: TEAL,
+    fontSize: 22,
+    fontWeight: "900",
+  },
   emptyTitle: {
     color: NAVY,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     marginTop: 13,
     textAlign: "center",
   },
   muted: {
     color: MUTED,
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 18,
     textAlign: "center",
-    marginTop: 7,
+    marginTop: 6,
   },
   retryButton: {
-    marginTop: 15,
+    marginTop: 16,
     borderRadius: 12,
-    backgroundColor: NAVY,
-    paddingHorizontal: 20,
+    backgroundColor: BLUE,
+    paddingHorizontal: 22,
     paddingVertical: 12,
   },
-  retryText: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
+  retryText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
   footer: {
     color: MUTED,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
     letterSpacing: 1,
     textAlign: "center",
-    lineHeight: 17,
+    lineHeight: 18,
     marginTop: 28,
+  },
+  footerSub: {
+    fontWeight: "600",
   },
 });
