@@ -1,59 +1,79 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { WebView } from "react-native-webview";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
+import WalletFunding from "../components/wallet/wallet-funding";
 
-const API_URL = process.env.EXPO_PUBLIC_TSC_API_URL?.replace(/\/+$/, "");
+type Wallet = {
+  id: string;
+  balance_minor: number;
+  currency_code: string;
+  status: string;
+};
 
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
+type Transaction = {
+  id: string;
+  transaction_type: string;
+  amount_minor: number;
+  balance_after_minor: number | null;
+  currency_code: string;
+  description: string | null;
+  created_at: string;
+};
 
-export default function WalletPaymentScreen() {
+const NAVY = "#102D50";
+const BLUE = "#174D78";
+const TEAL = "#187B83";
+const PAGE = "#F4F7FB";
+const INK = "#172B42";
+const MUTED = "#718096";
+const BORDER = "#E6ECF2";
+const GREEN = "#059669";
+const RED = "#DC2626";
+
+function money(amount: number, currency = "NGN") {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+  }).format(amount / 100);
+}
+
+function dateLabel(value: string) {
+  return new Date(value).toLocaleString("en-NG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Africa/Lagos",
+  });
+}
+
+export default function WalletScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{
-    reference?: string | string[];
-    checkoutUrl?: string | string[];
-    callbackUrl?: string | string[];
-  }>();
+  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
-  const reference = Array.isArray(params.reference)
-    ? params.reference[0]
-    : params.reference;
+  const loadWallet = useCallback(async (quiet = false) => {
+    if (quiet) setRefreshing(true);
+    else setLoading(true);
 
-  const checkoutUrl = Array.isArray(params.checkoutUrl)
-    ? params.checkoutUrl[0]
-    : params.checkoutUrl;
-
-  const callbackUrl = Array.isArray(params.callbackUrl)
-    ? params.callbackUrl[0]
-    : params.callbackUrl;
-
-  const [checkoutReturned, setCheckoutReturned] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [message, setMessage] = useState(
-    "Complete your payment securely inside TSC."
-  );
-  const [canRetry, setCanRetry] = useState(false);
-
-  const callbackHandled = useRef(false);
-  const verificationRunning = useRef(false);
-
-  const verifyPayment = useCallback(async () => {
-    if (!reference || !API_URL || verificationRunning.current) return;
-
-    verificationRunning.current = true;
-    setChecking(true);
-    setCanRetry(false);
-    setMessage("Confirming your payment securely...");
+    setError("");
 
     try {
       const {
@@ -61,338 +81,633 @@ export default function WalletPaymentScreen() {
         error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError || !session?.access_token) {
-        setMessage("Your session has expired. Please sign in again.");
-        setCanRetry(true);
+      if (sessionError || !session) {
+        router.replace("/login");
         return;
       }
 
-      for (let attempt = 0; attempt < 30; attempt += 1) {
-        const response = await fetch(
-          `${API_URL}/api/payments/paystack/verify`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({ reference }),
-          }
-        );
+      const { data: walletData, error: walletError } = await supabase
+        .from("wallet_accounts")
+        .select("id, balance_minor, currency_code, status")
+        .eq("traveller_id", session.user.id)
+        .maybeSingle();
 
-        const result = await response.json();
+      if (walletError) throw walletError;
 
-        if (response.ok && result.success) {
-          setSuccess(true);
-          setMessage("Payment confirmed. Your wallet has been funded.");
-          await wait(1400);
-          router.replace("/wallet");
-          return;
-        }
+      setWallet(walletData as Wallet | null);
 
-        if (response.status !== 409) {
-          setMessage(
-            result.error || "We could not verify this payment. Please retry."
-          );
-          setCanRetry(true);
-          return;
-        }
-
-        setMessage(
-          attempt < 29
-            ? "Payment received. Waiting for secure confirmation..."
-            : "Confirmation is taking longer than expected. Please check again."
-        );
-
-        if (attempt < 29) {
-          await wait(3000);
-        }
+      if (!walletData) {
+        setTransactions([]);
+        return;
       }
 
-      setCanRetry(true);
-    } catch (error) {
-      console.error("Mobile wallet payment verification failed:", error);
-      setMessage(
-        "Unable to reach the payment service. Check your connection and retry."
-      );
-      setCanRetry(true);
+      const { data: transactionData, error: transactionError } =
+        await supabase
+          .from("wallet_transactions")
+          .select(
+            "id, transaction_type, amount_minor, balance_after_minor, currency_code, description, created_at"
+          )
+          .eq("wallet_id", walletData.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+
+      if (transactionError) throw transactionError;
+
+      setTransactions((transactionData ?? []) as Transaction[]);
+    } catch (err) {
+      console.error("Wallet loading failed:", err);
+      setError("We could not load your wallet. Please try again.");
     } finally {
-      setChecking(false);
-      verificationRunning.current = false;
+      setLoading(false);
+      setRefreshing(false);
     }
-  }, [reference, router]);
+  }, [router]);
 
-  useEffect(() => {
-    if (checkoutReturned && !verificationRunning.current) {
-      void verifyPayment();
-    }
-  }, [checkoutReturned, verifyPayment]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadWallet();
+    }, [loadWallet])
+  );
 
-  const handleNavigation = (request: { url: string }) => {
-    if (!callbackUrl || !reference) return true;
+  const credits = useMemo(
+    () =>
+      transactions
+        .filter((item) => item.transaction_type === "credit")
+        .reduce((sum, item) => sum + Number(item.amount_minor), 0),
+    [transactions]
+  );
 
-    try {
-      const requested = new URL(request.url);
-      const expected = new URL(callbackUrl);
+  const debits = useMemo(
+    () =>
+      transactions
+        .filter((item) => item.transaction_type === "debit")
+        .reduce((sum, item) => sum + Number(item.amount_minor), 0),
+    [transactions]
+  );
 
-      if (
-        requested.origin === expected.origin &&
-        requested.pathname === expected.pathname &&
-        requested.searchParams.get("reference") === reference
-      ) {
-        if (!callbackHandled.current) {
-          callbackHandled.current = true;
-          setCheckoutReturned(true);
-          setMessage("Payment received. Confirming with Paystack...");
-        }
-
-        return false;
-      }
-    } catch {
-      // Allow normal checkout navigation for URLs that cannot be parsed.
-    }
-
-    return true;
-  };
-
-  if (!reference || !checkoutUrl || !callbackUrl) {
-    return (
-      <View style={styles.page}>
-        <View style={styles.card}>
-          <Ionicons name="alert-circle-outline" size={42} color="#DC2626" />
-          <Text style={styles.title}>Payment session unavailable</Text>
-          <Text style={styles.message}>
-            The payment details are incomplete. Return to your wallet and try
-            again.
-          </Text>
-          <Pressable
-            style={styles.button}
-            onPress={() => router.replace("/wallet")}
-          >
-            <Text style={styles.buttonText}>Return to wallet</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  if (!checkoutReturned) {
-    return (
-      <View style={styles.checkoutPage}>
-        <View style={styles.checkoutHeader}>
-          <Pressable
-            onPress={() => router.replace("/wallet")}
-            style={styles.closeButton}
-          >
-            <Ionicons name="close" size={23} color="#102D50" />
-          </Pressable>
-          <View style={styles.checkoutHeaderText}>
-            <Text style={styles.checkoutTitle}>Secure Paystack checkout</Text>
-            <Text style={styles.checkoutSubtitle}>Your payment stays inside TSC</Text>
-          </View>
-          <Ionicons name="shield-checkmark" size={22} color="#059669" />
-        </View>
-
-        <WebView
-          source={{ uri: checkoutUrl }}
-          onShouldStartLoadWithRequest={handleNavigation}
-          onNavigationStateChange={(navigation) => {
-            handleNavigation({ url: navigation.url });
-          }}
-          javaScriptEnabled
-          domStorageEnabled
-          sharedCookiesEnabled
-          thirdPartyCookiesEnabled
-          startInLoadingState
-          renderLoading={() => (
-            <View style={styles.webLoading}>
-              <ActivityIndicator size="large" color="#187B83" />
-              <Text style={styles.message}>Opening secure checkout...</Text>
-            </View>
-          )}
-          onError={() => {
-            setMessage("Checkout could not load. Please check your connection.");
-          }}
-          style={styles.webView}
-        />
-      </View>
-    );
-  }
+  const currency = wallet?.currency_code ?? "NGN";
 
   return (
-    <View style={styles.page}>
-      <View style={styles.card}>
-        <View style={[styles.icon, success && styles.successIcon]}>
-          {checking ? (
-            <ActivityIndicator size="large" color="#187B83" />
-          ) : (
-            <Ionicons
-              name={success ? "checkmark-circle" : "wallet-outline"}
-              size={40}
-              color={success ? "#059669" : "#187B83"}
-            />
-          )}
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" />
+
+      <View style={styles.header}>
+        <Pressable
+          style={styles.headerButton}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={21} color={NAVY} />
+        </Pressable>
+
+        <View style={styles.headerText}>
+          <Text style={styles.eyebrow}>TRAVELLER FINANCIAL CENTRE</Text>
+          <Text style={styles.title}>My Wallet</Text>
         </View>
 
-        <Text style={styles.title}>
-          {success ? "Payment successful" : "Confirming payment"}
-        </Text>
-
-        <Text style={styles.message}>{message}</Text>
-
-        {checking && (
-          <Text style={styles.waitingText}>
-            Please keep TSC open while we confirm your transaction.
-          </Text>
-        )}
-
-        {!checking && canRetry && (
-          <Pressable style={styles.button} onPress={() => void verifyPayment()}>
-            <Ionicons name="refresh-outline" size={18} color="#FFFFFF" />
-            <Text style={styles.buttonText}>Check payment again</Text>
-          </Pressable>
-        )}
-
-        {!checking && (
-          <Pressable
-            style={[styles.button, styles.secondaryButton]}
-            onPress={() => router.replace("/wallet")}
-          >
-            <Text style={styles.secondaryButtonText}>Return to wallet</Text>
-          </Pressable>
-        )}
-
-        <Text style={styles.footer}>
-          TSC verifies every payment securely before updating your wallet.
-        </Text>
+        <Pressable
+          style={styles.headerButton}
+          onPress={() => void loadWallet(true)}
+        >
+          <Ionicons name="refresh-outline" size={21} color={NAVY} />
+        </Pressable>
       </View>
-    </View>
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={TEAL} />
+          <Text style={styles.loadingText}>Loading your wallet...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void loadWallet(true)}
+              tintColor={TEAL}
+            />
+          }
+        >
+          {error ? (
+            <View style={styles.messageCard}>
+              <View style={styles.messageIcon}>
+                <Ionicons name="alert-circle-outline" size={27} color={RED} />
+              </View>
+              <Text style={styles.cardTitle}>Wallet unavailable</Text>
+              <Text style={styles.muted}>{error}</Text>
+              <Pressable
+                style={styles.primaryButton}
+                onPress={() => void loadWallet()}
+              >
+                <Text style={styles.primaryButtonText}>Try again</Text>
+              </Pressable>
+            </View>
+          ) : !wallet ? (
+            <View style={styles.messageCard}>
+              <View style={styles.messageIcon}>
+                <Ionicons name="wallet-outline" size={29} color={TEAL} />
+              </View>
+              <Text style={styles.cardTitle}>
+                Your wallet is being prepared
+              </Text>
+              <Text style={styles.muted}>
+                Your wallet account has not been created yet. Please check
+                again shortly.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.balanceCard}>
+                <View style={styles.decorCircleOne} />
+                <View style={styles.decorCircleTwo} />
+
+                <View style={styles.balanceHeader}>
+                  <View>
+                    <Text style={styles.balanceLabel}>
+                      AVAILABLE WALLET BALANCE
+                    </Text>
+                    <Text style={styles.balanceAmount}>
+                      {money(Number(wallet.balance_minor), currency)}
+                    </Text>
+                    <Text style={styles.balanceCaption}>
+                      Your available TSC wallet funds
+                    </Text>
+                  </View>
+
+                  <View style={styles.walletIcon}>
+                    <Ionicons name="wallet" size={28} color="#FFFFFF" />
+                  </View>
+                </View>
+
+                <View style={styles.balanceDivider} />
+
+                <View style={styles.balanceFooter}>
+                  <View style={styles.statusPill}>
+                    <View
+                      style={[
+                        styles.statusDot,
+                        {
+                          backgroundColor:
+                            wallet.status === "active" ? "#55E6A5" : "#FFBF69",
+                        },
+                      ]}
+                    />
+                    <Text style={styles.statusText}>
+                      {wallet.status === "active" ? "Wallet Active" : "Wallet Frozen"}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.secureText}>
+                    <Ionicons name="shield-checkmark" size={12} color="#D5E8F5" />
+                    {" "}Secure wallet
+                  </Text>
+                </View>
+              </View>
+
+              <WalletFunding
+                walletActive={wallet.status === "active"}
+                onWalletUpdated={() => void loadWallet(true)}
+              />
+
+              <View style={styles.summaryHeading}>
+                <Text style={styles.sectionTitle}>Wallet overview</Text>
+                <Text style={styles.summarySubtitle}>
+                  Latest 50 transactions
+                </Text>
+              </View>
+
+              <View style={styles.summaryGrid}>
+                <View style={styles.summaryCard}>
+                  <View style={[styles.summaryIcon, styles.creditBackground]}>
+                    <Ionicons name="arrow-down" size={19} color={GREEN} />
+                  </View>
+                  <Text style={styles.summaryLabel}>TOTAL CREDITS</Text>
+                  <Text style={[styles.summaryAmount, { color: GREEN }]}>
+                    {money(credits, currency)}
+                  </Text>
+                </View>
+
+                <View style={styles.summaryCard}>
+                  <View style={[styles.summaryIcon, styles.debitBackground]}>
+                    <Ionicons name="arrow-up" size={19} color={RED} />
+                  </View>
+                  <Text style={styles.summaryLabel}>TOTAL DEBITS</Text>
+                  <Text style={[styles.summaryAmount, { color: RED }]}>
+                    {money(debits, currency)}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.transactionHeading}>
+                <View>
+                  <Text style={styles.eyebrow}>ACCOUNT ACTIVITY</Text>
+                  <Text style={styles.sectionTitle}>Transactions</Text>
+                  <Text style={styles.summarySubtitle}>
+                    Your recent wallet activity
+                  </Text>
+                </View>
+                <View style={styles.countPill}>
+                  <Text style={styles.countText}>
+                    {transactions.length} records
+                  </Text>
+                </View>
+              </View>
+
+              {transactions.length === 0 ? (
+                <View style={styles.messageCard}>
+                  <View style={styles.messageIcon}>
+                    <Ionicons
+                      name="receipt-outline"
+                      size={28}
+                      color={MUTED}
+                    />
+                  </View>
+                  <Text style={styles.cardTitle}>No transactions yet</Text>
+                  <Text style={styles.muted}>
+                    Your wallet transactions will appear here when activity
+                    is recorded.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.transactionList}>
+                  {transactions.map((item) => {
+                    const isCredit = item.transaction_type === "credit";
+                    const txCurrency = item.currency_code || currency;
+                    const balanceAfter =
+                      item.balance_after_minor !== null &&
+                      item.balance_after_minor !== undefined
+                        ? money(Number(item.balance_after_minor), txCurrency)
+                        : "Not available";
+
+                    return (
+                      <View key={item.id} style={styles.transactionCard}>
+                        <View
+                          style={[
+                            styles.transactionIcon,
+                            isCredit ? styles.creditBackground : styles.debitBackground,
+                          ]}
+                        >
+                          <Ionicons
+                            name={isCredit ? "arrow-down" : "arrow-up"}
+                            size={20}
+                            color={isCredit ? GREEN : RED}
+                          />
+                        </View>
+
+                        <View style={styles.transactionInfo}>
+                          <Text style={styles.transactionTitle} numberOfLines={2}>
+                            {item.description ||
+                              (isCredit ? "Wallet credit" : "Wallet debit")}
+                          </Text>
+                          <Text style={styles.transactionDate}>
+                            {dateLabel(item.created_at)}
+                          </Text>
+                          <Text style={styles.transactionBalance}>
+                            Balance after: {balanceAfter}
+                          </Text>
+                        </View>
+
+                        <Text
+                          style={[
+                            styles.transactionAmount,
+                            { color: isCredit ? GREEN : RED },
+                          ]}
+                        >
+                          {isCredit ? "+" : "−"}
+                          {money(Number(item.amount_minor), txCurrency)}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </>
+          )}
+
+          <View style={styles.footer}>
+            <Ionicons name="shield-checkmark-outline" size={15} color={MUTED} />
+            <Text style={styles.footerText}>TRAVELLERS SAFETY COVERED</Text>
+          </View>
+        </ScrollView>
+      )}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  checkoutPage: {
+  safe: {
     flex: 1,
-    backgroundColor: "#F4F7FB",
+    backgroundColor: PAGE,
   },
-  checkoutHeader: {
-    minHeight: 65,
-    paddingHorizontal: 15,
+  header: {
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 15,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
-    borderBottomColor: "#E6ECF2",
-    gap: 12,
+    borderBottomColor: BORDER,
   },
-  closeButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+  headerButton: {
+    width: 43,
+    height: 43,
+    borderRadius: 14,
     backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
   },
-  checkoutHeaderText: {
+  headerText: {
     flex: 1,
+    marginLeft: 13,
   },
-  checkoutTitle: {
-    color: "#102D50",
-    fontSize: 14,
+  eyebrow: {
+    fontSize: 10,
     fontWeight: "900",
-  },
-  checkoutSubtitle: {
-    color: "#718096",
-    fontSize: 11,
-    marginTop: 3,
-  },
-  webView: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-  webLoading: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    backgroundColor: "#FFFFFF",
-  },
-  page: {
-    flex: 1,
-    backgroundColor: "#F4F7FB",
-    justifyContent: "center",
-    padding: 22,
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
-    padding: 25,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E6ECF2",
-  },
-  icon: {
-    width: 76,
-    height: 76,
-    borderRadius: 24,
-    backgroundColor: "#E8F5F4",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  successIcon: {
-    backgroundColor: "#ECFDF5",
+    letterSpacing: 1.2,
+    color: TEAL,
   },
   title: {
-    color: "#102D50",
-    fontSize: 21,
+    fontSize: 23,
     fontWeight: "900",
-    textAlign: "center",
+    color: NAVY,
+    marginTop: 3,
   },
-  message: {
-    color: "#718096",
-    fontSize: 14,
-    lineHeight: 22,
-    textAlign: "center",
-    marginTop: 12,
+  content: {
+    padding: 18,
+    paddingBottom: 35,
   },
-  waitingText: {
-    color: "#187B83",
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 14,
-  },
-  button: {
-    minHeight: 49,
-    width: "100%",
-    marginTop: 20,
-    borderRadius: 13,
-    backgroundColor: "#187B83",
-    flexDirection: "row",
+  center: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 9,
-    paddingHorizontal: 15,
   },
-  buttonText: {
+  loadingText: {
+    marginTop: 13,
+    color: MUTED,
+    fontSize: 14,
+  },
+  balanceCard: {
+    backgroundColor: NAVY,
+    borderRadius: 23,
+    padding: 23,
+    marginBottom: 27,
+    overflow: "hidden",
+  },
+  decorCircleOne: {
+    position: "absolute",
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: "#FFFFFF0B",
+    right: -75,
+    top: -85,
+  },
+  decorCircleTwo: {
+    position: "absolute",
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: "#FFFFFF08",
+    right: 30,
+    bottom: -85,
+  },
+  balanceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  balanceLabel: {
+    color: "#C7D8EA",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
+  balanceAmount: {
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 29,
+    fontWeight: "900",
+    marginTop: 14,
+  },
+  balanceCaption: {
+    color: "#D0DDEA",
+    fontSize: 12,
+    marginTop: 7,
+  },
+  walletIcon: {
+    width: 53,
+    height: 53,
+    borderRadius: 17,
+    backgroundColor: "#FFFFFF20",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  balanceDivider: {
+    height: 1,
+    backgroundColor: "#FFFFFF24",
+    marginTop: 23,
+    marginBottom: 17,
+  },
+  balanceFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF18",
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 25,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 7,
+  },
+  statusText: {
+    color: "#FFFFFF",
+    fontSize: 11,
     fontWeight: "800",
   },
-  secondaryButton: {
-    marginTop: 10,
-    backgroundColor: "#E8F5F4",
+  secureText: {
+    color: "#D5E8F5",
+    fontSize: 11,
+    fontWeight: "600",
   },
-  secondaryButtonText: {
-    color: "#187B83",
-    fontSize: 13,
+  summaryHeading: {
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: INK,
+    marginTop: 5,
+  },
+  summarySubtitle: {
+    color: MUTED,
+    fontSize: 12,
+    marginTop: 5,
+  },
+  summaryGrid: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 29,
+  },
+  summaryCard: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 17,
+    padding: 14,
+  },
+  summaryIcon: {
+    width: 37,
+    height: 37,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 13,
+  },
+  creditBackground: {
+    backgroundColor: "#D1FAE5",
+  },
+  debitBackground: {
+    backgroundColor: "#FEE2E2",
+  },
+  summaryLabel: {
+    color: MUTED,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  summaryAmount: {
+    fontSize: 15,
+    fontWeight: "900",
+    marginTop: 8,
+  },
+  transactionHeading: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  countPill: {
+    backgroundColor: "#E8F1FA",
+    borderRadius: 25,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+  },
+  countText: {
+    color: BLUE,
+    fontSize: 10,
     fontWeight: "800",
+  },
+  transactionList: {
+    gap: 10,
+  },
+  transactionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    padding: 13,
+  },
+  transactionIcon: {
+    width: 41,
+    height: 41,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+  },
+  transactionInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  transactionTitle: {
+    color: INK,
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  transactionDate: {
+    color: MUTED,
+    fontSize: 10,
+    marginTop: 5,
+  },
+  transactionBalance: {
+    color: MUTED,
+    fontSize: 10,
+    marginTop: 4,
+  },
+  transactionAmount: {
+    fontSize: 12,
+    fontWeight: "900",
+    marginLeft: 7,
+    maxWidth: 115,
+    textAlign: "right",
+  },
+  messageCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 23,
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: "center",
+    gap: 10,
+  },
+  messageIcon: {
+    width: 55,
+    height: 55,
+    borderRadius: 18,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: INK,
+    textAlign: "center",
+  },
+  muted: {
+    color: MUTED,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  primaryButton: {
+    backgroundColor: TEAL,
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    marginTop: 9,
+  },
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 13,
   },
   footer: {
-    color: "#718096",
-    fontSize: 10,
-    lineHeight: 16,
-    textAlign: "center",
-    marginTop: 22,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 7,
+    marginTop: 30,
+  },
+  footerText: {
+    color: MUTED,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.1,
   },
 });

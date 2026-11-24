@@ -9,7 +9,7 @@ export default function WalletFunding({
   walletActive: boolean;
 }) {
   const router = useRouter();
-  const [amount, setAmount] = useState("5000");
+  const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [message, setMessage] = useState("");
