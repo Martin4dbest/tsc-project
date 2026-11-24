@@ -1,636 +1,927 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import JourneyTravellerGpsPanel from "./JourneyTravellerGpsPanel";
 
-type JourneyStatus = "Upcoming" | "Active" | "Completed" | "Cancelled";
+type JourneyStatus = "draft" | "scheduled" | "active" | "completed" | "cancelled";
+type Filter = "all" | "upcoming" | "active" | "completed";
 
-interface JourneyRecord {
+type Journey = {
   id: string;
-  mode: string;
-  title: string;
+  traveller_id: string;
+  journey_name: string;
+  origin_name: string;
+  origin_address: string | null;
+  destination_name: string;
+  destination_address: string | null;
+  departure_at: string;
+  departure_timezone: string;
+  expected_arrival_at: string | null;
+  arrival_timezone: string | null;
+  transport_mode: string;
   status: JourneyStatus;
-  fromCity: string;
-  fromAddress?: string;
-  toCity: string;
-  toAddress?: string;
-  departure: string;
-  arrival: string;
-  note: string;
-}
+  notes: string | null;
+  location_sharing_enabled: boolean;
+  started_at: string | null;
+  completed_at: string | null;
+};
 
-interface JourneyManagementClientProps {
+type JourneyForm = {
+  journey_name: string;
+  origin_name: string;
+  origin_address: string;
+  destination_name: string;
+  destination_address: string;
+  departure_at: string;
+  expected_arrival_at: string;
+  transport_mode: string;
+  notes: string;
+};
+
+type Props = {
   travellerId: string;
   travellerName: string;
-  initialJourneys?: JourneyRecord[];
+};
+
+const EMPTY_FORM: JourneyForm = {
+  journey_name: "",
+  origin_name: "",
+  origin_address: "",
+  destination_name: "",
+  destination_address: "",
+  departure_at: "",
+  expected_arrival_at: "",
+  transport_mode: "road",
+  notes: "",
+};
+
+const MODES = [
+  { value: "road", label: "Road", icon: "🚘" },
+  { value: "air", label: "Air", icon: "✈️" },
+  { value: "rail", label: "Rail", icon: "🚆" },
+  { value: "sea", label: "Sea", icon: "🚢" },
+  { value: "other", label: "Other", icon: "➕" },
+];
+
+const STATUS_COLORS: Record<JourneyStatus, string> = {
+  draft: "bg-slate-100 text-slate-600",
+  scheduled: "bg-blue-50 text-blue-700",
+  active: "bg-emerald-50 text-emerald-700",
+  completed: "bg-slate-100 text-slate-700",
+  cancelled: "bg-red-50 text-red-700",
+};
+
+function localDateTimeValue(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-const DEFAULT_JOURNEYS: JourneyRecord[] = [
-  {
-    id: "jrn-001",
-    mode: "ROAD JOURNEY",
-    title: "Business trip Abuja",
-    status: "Completed",
-    fromCity: "Lagos",
-    fromAddress: "12 Ajah",
-    toCity: "Abuja",
-    toAddress: "Wuse Zone 5",
-    departure: "Nov 7, 2026, 10:23 AM",
-    arrival: "Not specified",
-    note: "I am going for a business trip",
-  },
-  {
-    id: "jrn-002",
-    mode: "ROAD JOURNEY",
-    title: "Short Trip to Lekki",
-    status: "Completed",
-    fromCity: "Ajah",
-    toCity: "Lekki",
-    departure: "Nov 7, 2026, 12:36 PM",
-    arrival: "Not specified",
-    note: "I am going for a meeting",
-  },
-];
+function formatDate(value: string | null) {
+  if (!value) return "Not specified";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
 
-const FILTER_TABS: Array<"All" | JourneyStatus> = [
-  "All",
-  "Upcoming",
-  "Active",
-  "Completed",
-  "Cancelled",
-];
+  return date.toLocaleString([], {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function statusLabel(status: JourneyStatus) {
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function inputClass() {
+  return "mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-[#172536] outline-none transition focus:border-[#F28C28] focus:ring-2 focus:ring-orange-100";
+}
 
 export default function JourneyManagementClient({
   travellerId,
   travellerName,
-  initialJourneys = DEFAULT_JOURNEYS,
-}: JourneyManagementClientProps) {
-  const [journeys, setJourneys] = useState<JourneyRecord[]>(initialJourneys);
-  const [activeFilter, setActiveFilter] = useState<"All" | JourneyStatus>("All");
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedJourney, setSelectedJourney] = useState<JourneyRecord | null>(
-    null
-  );
-  const [isModalOpen, setIsModalOpen] = useState(false);
+}: Props) {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
-  // New Journey Form State
-  const [title, setTitle] = useState("");
-  const [fromCity, setFromCity] = useState("");
-  const [fromAddress, setFromAddress] = useState("");
-  const [toCity, setToCity] = useState("");
-  const [toAddress, setToAddress] = useState("");
-  const [departure, setDeparture] = useState("");
-  const [arrival, setArrival] = useState("");
-  const [note, setNote] = useState("");
+  const [journeys, setJourneys] = useState<Journey[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
+
+  const [modal, setModal] = useState<"form" | "details" | null>(null);
+  const [selected, setSelected] = useState<Journey | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<JourneyForm>(EMPTY_FORM);
+
+  const loadJourneys = useCallback(async (quiet = false) => {
+    if (quiet) setRefreshing(true);
+    else setLoading(true);
+
+    setError("");
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        window.location.href = "/login";
+        return;
+      }
+
+      const { data, error: queryError } = await supabase
+        .from("journeys")
+        .select("*")
+        .eq("traveller_id", travellerId)
+        .order("departure_at", { ascending: true });
+
+      if (queryError) throw queryError;
+
+      setJourneys((data ?? []) as Journey[]);
+    } catch (err) {
+      console.error("Journey loading failed:", err);
+      setError("We could not load your journeys. Please try again.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [supabase, travellerId]);
+
+  useEffect(() => {
+    void loadJourneys();
+  }, [loadJourneys]);
 
   const filteredJourneys = useMemo(() => {
-    if (activeFilter === "All") return journeys;
-    return journeys.filter((item) => item.status === activeFilter);
-  }, [journeys, activeFilter]);
+    return journeys.filter((journey) => {
+      if (filter === "all") return true;
+      if (filter === "upcoming") {
+        return journey.status === "draft" || journey.status === "scheduled";
+      }
+      return journey.status === filter;
+    });
+  }, [journeys, filter]);
 
-  function handleRefresh() {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-    }, 450);
+  function openCreate() {
+    setSelected(null);
+    setEditing(false);
+    setNotice("");
+    setForm({
+      ...EMPTY_FORM,
+      departure_at: localDateTimeValue(new Date(Date.now() + 86400000)),
+    });
+    setModal("form");
   }
 
-  function handleCreateJourney(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim() || !fromCity.trim() || !toCity.trim()) return;
+  function openEdit(journey: Journey) {
+    setSelected(journey);
+    setEditing(true);
+    setNotice("");
 
-    const newRecord: JourneyRecord = {
-      id: `jrn-${Date.now()}`,
-      mode: "ROAD JOURNEY",
-      title: title.trim(),
-      status: "Upcoming",
-      fromCity: fromCity.trim(),
-      fromAddress: fromAddress.trim() || undefined,
-      toCity: toCity.trim(),
-      toAddress: toAddress.trim() || undefined,
-      departure: departure.trim() || "Scheduled",
-      arrival: arrival.trim() || "Not specified",
-      note: note.trim() || "Standard protected journey",
-    };
+    setForm({
+      journey_name: journey.journey_name,
+      origin_name: journey.origin_name,
+      origin_address: journey.origin_address ?? "",
+      destination_name: journey.destination_name,
+      destination_address: journey.destination_address ?? "",
+      departure_at: localDateTimeValue(new Date(journey.departure_at)),
+      expected_arrival_at: journey.expected_arrival_at
+        ? localDateTimeValue(new Date(journey.expected_arrival_at))
+        : "",
+      transport_mode: journey.transport_mode,
+      notes: journey.notes ?? "",
+    });
 
-    setJourneys((prev) => [newRecord, ...prev]);
-    setTitle("");
-    setFromCity("");
-    setFromAddress("");
-    setToCity("");
-    setToAddress("");
-    setDeparture("");
-    setArrival("");
-    setNote("");
-    setIsModalOpen(false);
-    setActiveFilter("All");
+    setModal("form");
   }
 
-  function statusBadgeStyle(status: JourneyStatus) {
-    switch (status) {
-      case "Completed":
-        return "border-emerald-200 bg-emerald-50 text-emerald-700";
-      case "Active":
-        return "border-blue-200 bg-blue-50 text-[#1D4ED8]";
-      case "Upcoming":
-        return "border-amber-200 bg-amber-50 text-[#B45309]";
-      case "Cancelled":
-        return "border-slate-200 bg-slate-100 text-slate-600";
+  function updateField(field: keyof JourneyForm, value: string) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveJourney(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setNotice("");
+
+    if (
+      !form.journey_name.trim() ||
+      !form.origin_name.trim() ||
+      !form.destination_name.trim() ||
+      !form.departure_at.trim()
+    ) {
+      setNotice("Complete the journey name, origin, destination and departure date/time.");
+      return;
+    }
+
+    const departure = new Date(form.departure_at);
+    const arrival = form.expected_arrival_at.trim()
+      ? new Date(form.expected_arrival_at)
+      : null;
+
+    if (Number.isNaN(departure.getTime())) {
+      setNotice("Enter a valid departure date and time.");
+      return;
+    }
+
+    if (departure.getTime() <= Date.now()) {
+      setNotice("Departure must be in the future.");
+      return;
+    }
+
+    if (arrival && (Number.isNaN(arrival.getTime()) || arrival <= departure)) {
+      setNotice("Expected arrival must be later than departure.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        window.location.href = "/login";
+        return;
+      }
+
+      const timezone =
+        Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+      const payload = {
+        journey_name: form.journey_name.trim(),
+        origin_name: form.origin_name.trim(),
+        origin_address: form.origin_address.trim() || null,
+        destination_name: form.destination_name.trim(),
+        destination_address: form.destination_address.trim() || null,
+        departure_at: departure.toISOString(),
+        departure_timezone: timezone,
+        expected_arrival_at: arrival ? arrival.toISOString() : null,
+        arrival_timezone: arrival ? timezone : null,
+        transport_mode: form.transport_mode,
+        notes: form.notes.trim() || null,
+      };
+
+      const result =
+        editing && selected
+          ? await supabase
+              .from("journeys")
+              .update(payload)
+              .eq("id", selected.id)
+              .eq("traveller_id", session.user.id)
+          : await supabase.from("journeys").insert({
+              ...payload,
+              traveller_id: session.user.id,
+              status: "draft",
+              location_sharing_enabled: false,
+            });
+
+      if (result.error) throw result.error;
+
+      setModal(null);
+      setSelected(null);
+      await loadJourneys(true);
+      setNotice(
+        editing
+          ? "Your journey details have been updated."
+          : "Your journey has been saved as a draft. You can schedule it from its details."
+      );
+    } catch (err) {
+      console.error("Journey save failed:", err);
+      setNotice(
+        err instanceof Error
+          ? err.message
+          : "Unable to save your journey. Please try again."
+      );
+    } finally {
+      setSaving(false);
     }
   }
 
+  async function changeStatus(journey: Journey, status: JourneyStatus) {
+    const messages: Record<string, string> = {
+      scheduled: "Schedule this journey?",
+      active: "Start this journey now?",
+      completed: "Mark this journey as completed?",
+      cancelled: "Cancel this journey?",
+    };
+
+    if (!window.confirm(messages[status] || "Update this journey?")) return;
+
+    setSaving(true);
+    setNotice("");
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        window.location.href = "/login";
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from("journeys")
+        .update({ status })
+        .eq("id", journey.id)
+        .eq("traveller_id", session.user.id);
+
+      if (updateError) throw updateError;
+
+      setModal(null);
+      setSelected(null);
+      await loadJourneys(true);
+      setNotice(`Journey is now ${statusLabel(status).toLowerCase()}.`);
+    } catch (err) {
+      console.error("Journey status update failed:", err);
+      setNotice(
+        err instanceof Error
+          ? err.message
+          : "This status change could not be completed."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function updateSelectedGps(enabled: boolean) {
+    if (!selected) return;
+
+    const updated = {
+      ...selected,
+      location_sharing_enabled: enabled,
+    };
+
+    setSelected(updated);
+    setJourneys((current) =>
+      current.map((journey) =>
+        journey.id === updated.id ? updated : journey
+      )
+    );
+  }
+
+  function closeModal() {
+    if (saving) return;
+    setModal(null);
+    setSelected(null);
+    setNotice("");
+  }
+
+  const summary = {
+    scheduled: journeys.filter((journey) => journey.status === "scheduled").length,
+    active: journeys.filter((journey) => journey.status === "active").length,
+    completed: journeys.filter((journey) => journey.status === "completed").length,
+  };
+
   return (
-    <section
-      aria-label="Your travel activity"
-      data-traveller-id={travellerId}
-      className="space-y-6"
-    >
-      {/* Top Activity Header Bar */}
-      <div className="overflow-hidden rounded-2xl border border-[#1D4ED8]/15 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-100 bg-gradient-to-r from-[#0F2952] to-[#1E3A8A] px-5 py-4 text-white sm:px-6">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span aria-hidden="true" className="text-sm">
-                📊
-              </span>
-              <span className="text-xs font-extrabold tracking-[0.16em] text-[#FCD34D] uppercase">
-                YOUR TRAVEL ACTIVITY
-              </span>
-            </div>
-            <h2 className="text-lg font-extrabold tracking-tight text-white sm:text-xl">
-              Journey history
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={handleRefresh}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3.5 py-2 text-sm font-bold text-white backdrop-blur-xs transition-all hover:border-[#F5A623] hover:bg-white/20"
-            >
-              <span>Refresh</span>
-              <span
-                aria-hidden="true"
-                className={`inline-block transition-transform duration-500 ${
-                  isRefreshing ? "rotate-360" : ""
-                }`}
-              >
-                ↻
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(true)}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#F5A623] px-4 py-2 text-sm font-extrabold text-[#0F2952] shadow-xs transition-colors hover:bg-[#FBBF24]"
-            >
-              <span>+ Plan Journey</span>
-            </button>
-          </div>
+    <section aria-label="My journeys" data-traveller-id={travellerId} className="space-y-5">
+      <header className="flex items-center gap-3 py-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-extrabold tracking-[0.16em] text-[#F28C28]">
+            TRAVELLER SERVICES
+          </p>
+          <h2 className="mt-1 text-2xl font-extrabold text-[#172536]">
+            My journeys
+          </h2>
         </div>
+        <button
+          type="button"
+          onClick={openCreate}
+          aria-label="Plan a journey"
+          className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#071D49] text-2xl font-medium text-white transition hover:bg-blue-900"
+        >
+          +
+        </button>
+      </header>
 
-        {/* Filter Pills Strip */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-[#F8FAFD] px-5 py-3.5 sm:px-6">
-          <div
-            role="tablist"
-            aria-label="Filter journeys by status"
-            className="flex flex-wrap items-center gap-2"
-          >
-            {FILTER_TABS.map((tab) => {
-              const isSelected = activeFilter === tab;
-              const count =
-                tab === "All"
-                  ? journeys.length
-                  : journeys.filter((j) => j.status === tab).length;
-
-              return (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  aria-selected={isSelected}
-                  onClick={() => setActiveFilter(tab)}
-                  className={`inline-flex cursor-pointer items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-bold transition-all ${
-                    isSelected
-                      ? "bg-[#0F2952] text-[#F5A623] shadow-2xs"
-                      : "border border-slate-200 bg-white text-[#1E3A8A] hover:border-[#1D4ED8]/40 hover:bg-blue-50/50"
-                  }`}
-                >
-                  <span>{tab}</span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${
-                      isSelected
-                        ? "bg-[#F5A623]/20 text-[#FCD34D]"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          <span className="text-xs font-semibold text-slate-500 sm:text-sm">
-            Showing {filteredJourneys.length} of {journeys.length} trips
-          </span>
+      <div className="flex items-center gap-4 rounded-2xl bg-[#071D49] p-5 text-white sm:p-6">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-2xl">
+          <span className="text-[#F28C28]">➤</span>
         </div>
-
-        {/* Journey Cards List */}
-        <div className="p-5 sm:p-6">
-          {filteredJourneys.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/40 p-8 text-center">
-              <p className="text-base font-bold text-[#0F2952]">
-                No {activeFilter.toLowerCase()} journeys found
-              </p>
-              <p className="mt-1.5 text-sm text-slate-600">
-                Switch filter tabs or plan a new protected journey for{" "}
-                {travellerName}.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-              {filteredJourneys.map((journey) => (
-                <article
-                  key={journey.id}
-                  className="group flex flex-col justify-between rounded-2xl border border-[#1D4ED8]/15 bg-white p-5 shadow-2xs transition-all hover:-translate-y-0.5 hover:border-[#F5A623] hover:shadow-md sm:p-6"
-                >
-                  <div>
-                    {/* Top Row: Mode Tag & Status Badge */}
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2952] px-3 py-1 text-xs font-extrabold tracking-wider text-[#F5A623] uppercase">
-                        <span aria-hidden="true">🚘</span>
-                        <span>{journey.mode}</span>
-                      </span>
-
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${statusBadgeStyle(
-                          journey.status
-                        )}`}
-                      >
-                        <span aria-hidden="true">
-                          {journey.status === "Completed"
-                            ? "✅"
-                            : journey.status === "Active"
-                              ? "🟢"
-                              : journey.status === "Upcoming"
-                                ? "⏳"
-                                : "⚪"}
-                        </span>
-                        <span>{journey.status}</span>
-                      </span>
-                    </div>
-
-                    {/* Journey Title */}
-                    <h3 className="mt-3.5 text-lg font-extrabold tracking-tight text-[#0F2952] group-hover:text-[#1D4ED8]">
-                      {journey.title}
-                    </h3>
-
-                    {/* FROM -> TO Visual Route Box */}
-                    <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-blue-100 bg-gradient-to-r from-[#F4F8FF] via-white to-[#FFFBEB] p-3.5 sm:grid-cols-2">
-                      {/* FROM */}
-                      <div className="space-y-1">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-extrabold tracking-wider text-[#1D4ED8] uppercase">
-                          <span aria-hidden="true">📍</span>
-                          <span>FROM</span>
-                        </span>
-                        <p className="text-sm font-extrabold text-[#0F2952] sm:text-base">
-                          {journey.fromCity}
-                        </p>
-                        {journey.fromAddress && (
-                          <p className="text-xs font-medium text-slate-600 sm:text-sm">
-                            {journey.fromAddress}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* TO */}
-                      <div className="space-y-1 border-t border-blue-100 pt-2.5 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-3.5">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-extrabold tracking-wider text-[#B45309] uppercase">
-                          <span aria-hidden="true">🏁</span>
-                          <span>TO</span>
-                        </span>
-                        <p className="text-sm font-extrabold text-[#0F2952] sm:text-base">
-                          {journey.toCity}
-                        </p>
-                        {journey.toAddress && (
-                          <p className="text-xs font-medium text-slate-600 sm:text-sm">
-                            {journey.toAddress}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Departure (GREEN) & Arrival Timestamps */}
-                    <div className="mt-4 flex flex-col gap-2.5 text-sm">
-                      {/* Green Departure Pill */}
-                      <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/90 px-3.5 py-2 font-bold text-emerald-700">
-                        <span aria-hidden="true">🛫</span>
-                        <span>Departure:</span>
-                        <span className="text-emerald-800">
-                          {journey.departure}
-                        </span>
-                      </div>
-
-                      {/* Arrival Pill */}
-                      <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-3.5 py-2 font-semibold text-[#1E3A8A]">
-                        <span aria-hidden="true">🛬</span>
-                        <span>Arrival:</span>
-                        <span className="text-slate-600">
-                          {journey.arrival}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Trip Purpose / Note */}
-                    <div className="mt-3.5 flex items-start gap-2 rounded-xl border border-amber-200/60 bg-amber-50/50 px-3.5 py-2.5 text-sm font-medium text-[#0F2952]">
-                      <span aria-hidden="true">📝</span>
-                      <span>{journey.note}</span>
-                    </div>
-                  </div>
-
-                  {/* Card Footer Action */}
-                  <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3.5">
-                    <span className="text-xs font-semibold text-emerald-700 sm:text-sm">
-                      🛡️ TSC Covered
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={() => setSelectedJourney(journey)}
-                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#0F2952] px-4 py-2 text-sm font-extrabold text-[#F5A623] transition-all hover:bg-[#1D4ED8] hover:text-white"
-                    >
-                      <span>View details</span>
-                      <span aria-hidden="true">→</span>
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          {/* Safety Advisory Banner */}
-          <div
-            role="note"
-            className="mt-6 flex items-start gap-3 rounded-2xl border border-amber-300/70 bg-gradient-to-r from-amber-50 via-[#FFFBEB] to-blue-50/50 p-4 text-sm text-[#0F2952]"
-          >
-            <span aria-hidden="true" className="text-lg">
-              🚨
-            </span>
-            <p className="leading-relaxed font-medium text-[#0F2952]">
-              <strong className="font-extrabold text-[#B45309]">
-                Safety Advisory:
-              </strong>{" "}
-              TSC journey management supports your travel planning. For
-              immediate danger or urgent assistance, contact the appropriate
-              local emergency services.
-            </p>
-          </div>
+        <div>
+          <h3 className="text-base font-bold">Travel with a plan</h3>
+          <p className="mt-1 text-sm leading-6 text-blue-100">
+            Organise your trips and keep your journey information in one place.
+          </p>
         </div>
       </div>
 
-      {/* VIEW DETAILS MODAL */}
-      {selectedJourney && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={selectedJourney.title}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#06132A]/60 p-4 backdrop-blur-xs"
-        >
-          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[#F5A623]/40 bg-white shadow-2xl">
-            <div className="flex items-center justify-between bg-[#0F2952] px-5 py-4 text-white">
-              <div className="flex items-center gap-2">
-                <span aria-hidden="true" className="text-base">
-                  🧭
-                </span>
-                <h3 className="text-base font-extrabold text-[#F5A623]">
-                  {selectedJourney.title}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedJourney(null)}
-                className="cursor-pointer rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold text-white hover:bg-[#F5A623] hover:text-[#0F2952]"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3.5 p-5 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-500">Mode</span>
-                <span className="font-extrabold text-[#0F2952]">
-                  {selectedJourney.mode}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-500">Status</span>
-                <span
-                  className={`rounded-full border px-3 py-0.5 text-xs font-bold ${statusBadgeStyle(
-                    selectedJourney.status
-                  )}`}
-                >
-                  {selectedJourney.status}
-                </span>
-              </div>
-              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3.5">
-                <p className="font-bold text-[#1D4ED8]">
-                  📍 From: {selectedJourney.fromCity}
-                  {selectedJourney.fromAddress
-                    ? ` (${selectedJourney.fromAddress})`
-                    : ""}
-                </p>
-                <p className="mt-1.5 font-bold text-[#B45309]">
-                  🏁 To: {selectedJourney.toCity}
-                  {selectedJourney.toAddress
-                    ? ` (${selectedJourney.toAddress})`
-                    : ""}
-                </p>
-              </div>
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 font-bold text-emerald-700">
-                🛫 Departure: {selectedJourney.departure}
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 font-semibold text-[#1E3A8A]">
-                🛬 Arrival: {selectedJourney.arrival}
-              </div>
-              <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-[#0F2952]">
-                <strong className="block text-xs tracking-wider text-[#B45309] uppercase">
-                  Trip Purpose
-                </strong>
-                <p className="mt-1 font-medium">{selectedJourney.note}</p>
-              </div>
-
-              <div className="pt-2 text-right">
-                <button
-                  type="button"
-                  onClick={() => setSelectedJourney(null)}
-                  className="cursor-pointer rounded-xl bg-[#0F2952] px-4 py-2 text-sm font-extrabold text-[#F5A623] hover:bg-[#1D4ED8] hover:text-white"
-                >
-                  Close details
-                </button>
-              </div>
-            </div>
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Scheduled", value: summary.scheduled, color: "text-[#071D49]" },
+          { label: "Active", value: summary.active, color: "text-emerald-600" },
+          { label: "Completed", value: summary.completed, color: "text-[#071D49]" },
+        ].map((item) => (
+          <div key={item.label} className="rounded-xl border border-[#E2E7EE] bg-white p-3.5 sm:p-4">
+            <p className={`text-2xl font-extrabold ${item.color}`}>{item.value}</p>
+            <p className="mt-1 text-xs font-semibold text-[#687789]">{item.label}</p>
           </div>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between gap-3 pt-2">
+        <h3 className="text-base font-extrabold text-[#172536]">Your travel activity</h3>
+        <button
+          type="button"
+          onClick={() => void loadJourneys(true)}
+          disabled={refreshing}
+          className="rounded-lg px-3 py-2 text-sm font-bold text-[#687789] transition hover:bg-white disabled:opacity-50"
+        >
+          {refreshing ? "Refreshing…" : "↻ Refresh"}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {([
+          ["all", "All journeys"],
+          ["upcoming", "Upcoming"],
+          ["active", "Active"],
+          ["completed", "Completed"],
+        ] as [Filter, string][]).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setFilter(value)}
+            aria-pressed={filter === value}
+            className={`rounded-full border px-4 py-2 text-xs font-bold transition ${
+              filter === value
+                ? "border-[#071D49] bg-[#071D49] text-white"
+                : "border-[#E2E7EE] bg-white text-[#687789] hover:border-[#F28C28]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {notice && (
+        <div role="status" className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          {notice}
         </div>
       )}
 
-      {/* PLAN NEW JOURNEY MODAL */}
-      {isModalOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Plan a new journey"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#06132A]/60 p-4 backdrop-blur-xs"
-        >
-          <form
-            onSubmit={handleCreateJourney}
-            className="w-full max-w-md overflow-hidden rounded-2xl border border-[#F5A623]/40 bg-white shadow-2xl"
+      {loading ? (
+        <div className="rounded-2xl border border-[#E2E7EE] bg-white py-14 text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-orange-100 border-t-[#F28C28]" />
+          <p className="mt-3 text-sm text-[#687789]">Loading your journeys...</p>
+        </div>
+      ) : error ? (
+        <div className="rounded-2xl border border-[#E2E7EE] bg-white p-7 text-center">
+          <p className="font-bold text-[#172536]">Unable to load journeys</p>
+          <p className="mt-2 text-sm text-[#687789]">{error}</p>
+          <button
+            type="button"
+            onClick={() => void loadJourneys()}
+            className="mt-4 rounded-xl bg-[#071D49] px-5 py-2.5 text-sm font-bold text-white"
           >
-            <div className="flex items-center justify-between bg-[#0F2952] px-5 py-4 text-white">
-              <div className="flex items-center gap-2">
-                <span aria-hidden="true" className="text-base">
-                  ✈️
-                </span>
-                <h3 className="text-base font-extrabold text-[#F5A623]">
-                  Plan New Protected Journey
-                </h3>
-              </div>
+            Try again
+          </button>
+        </div>
+      ) : filteredJourneys.length === 0 ? (
+        <div className="rounded-2xl border border-[#E2E7EE] bg-white px-6 py-10 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-50 text-2xl">
+            ✈️
+          </div>
+          <h3 className="mt-4 text-base font-extrabold text-[#172536]">
+            No journeys here yet
+          </h3>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#687789]">
+            {filter === "all"
+              ? "Create your first journey to begin organising your travel."
+              : "Journeys matching this category will appear here."}
+          </p>
+          {filter === "all" && (
+            <button
+              type="button"
+              onClick={openCreate}
+              className="mt-5 rounded-xl bg-[#071D49] px-5 py-3 text-sm font-bold text-white"
+            >
+              + Create a journey
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3">
+          {filteredJourneys.map((journey) => {
+            const mode = MODES.find((item) => item.value === journey.transport_mode);
+
+            return (
+              <button
+                key={journey.id}
+                type="button"
+                onClick={() => {
+                  setSelected(journey);
+                  setModal("details");
+                  setNotice("");
+                }}
+                className="w-full rounded-2xl border border-[#E2E7EE] bg-white p-4 text-left transition hover:border-[#F28C28] hover:shadow-sm sm:p-5"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-xl">
+                    {mode?.icon ?? "🚘"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="truncate text-sm font-extrabold text-[#172536]">
+                      {journey.journey_name}
+                    </h4>
+                    <p className="mt-1 text-xs text-[#687789]">
+                      {formatDate(journey.departure_at)}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-extrabold ${STATUS_COLORS[journey.status]}`}>
+                    {statusLabel(journey.status)}
+                  </span>
+                </div>
+
+                <div className="mt-5 flex gap-3 pl-2">
+                  <div className="flex w-3 shrink-0 flex-col items-center py-1">
+                    <span className="h-2.5 w-2.5 rounded-full border-2 border-emerald-600 bg-white" />
+                    <span className="my-1 h-6 w-px bg-slate-300" />
+                    <span className="h-2.5 w-2.5 rounded-sm bg-[#F28C28]" />
+                  </div>
+                  <div className="flex min-h-12 flex-1 flex-col justify-between gap-3">
+                    <p className="truncate text-sm font-semibold text-[#344456]">
+                      {journey.origin_name}
+                    </p>
+                    <p className="truncate text-sm font-semibold text-[#344456]">
+                      {journey.destination_name}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                  <span className="text-[10px] font-bold tracking-wide text-[#687789]">
+                    {journey.transport_mode.toUpperCase()} JOURNEY
+                  </span>
+                  <span className="text-xs font-extrabold text-[#F28C28]">
+                    View details ›
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex items-start gap-3 rounded-xl bg-[#EAF6F1] p-4">
+        <span className="text-lg text-emerald-700">🛡️</span>
+        <p className="text-xs leading-5 text-[#41685A]">
+          Your journey information is protected by your account permissions.
+          Location sharing is off unless you explicitly enable it in a supported feature.
+        </p>
+      </div>
+
+      {modal === "form" && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#071D49]/65 p-3 backdrop-blur-sm sm:p-5">
+          <form
+            onSubmit={saveJourney}
+            className="flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-[#F4F6F9] shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-[#E2E7EE] bg-white px-5 py-4">
+              <h3 className="text-base font-extrabold text-[#172536]">
+                {editing ? "Edit journey" : "Plan a journey"}
+              </h3>
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="cursor-pointer rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold text-white hover:bg-[#F5A623] hover:text-[#0F2952]"
+                onClick={closeModal}
+                disabled={saving}
+                aria-label="Close form"
+                className="rounded-xl bg-[#F4F6F9] px-3 py-2 text-lg text-[#172536]"
               >
-                ✕
+                ×
               </button>
             </div>
 
-            <div className="space-y-3.5 p-5 text-sm">
-              <div>
-                <label className="mb-1 block font-bold text-[#0F2952]">
-                  Journey Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Business trip Abuja"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
-                />
-              </div>
+            <div className="overflow-y-auto p-5 sm:p-6">
+              <h4 className="mb-4 text-sm font-extrabold text-[#071D49]">
+                Journey information
+              </h4>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block font-bold text-[#1D4ED8]">
-                    From City *
-                  </label>
+              <div className="space-y-4">
+                <label className="block text-xs font-bold text-[#344456]">
+                  Journey name *
                   <input
-                    type="text"
                     required
-                    placeholder="e.g. Lagos"
-                    value={fromCity}
-                    onChange={(e) => setFromCity(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
+                    value={form.journey_name}
+                    onChange={(e) => updateField("journey_name", e.target.value)}
+                    placeholder="e.g. Business trip to Abuja"
+                    className={inputClass()}
                   />
-                </div>
-                <div>
-                  <label className="mb-1 block font-bold text-[#1D4ED8]">
-                    From Address
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 12 Ajah"
-                    value={fromAddress}
-                    onChange={(e) => setFromAddress(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block font-bold text-[#B45309]">
-                    To City *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Abuja"
-                    value={toCity}
-                    onChange={(e) => setToCity(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block font-bold text-[#B45309]">
-                    To Address
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Wuse Zone 5"
-                    value={toAddress}
-                    onChange={(e) => setToAddress(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block font-bold text-emerald-700">
-                    🛫 Departure
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Nov 7, 2026, 10:23 AM"
-                    value={departure}
-                    onChange={(e) => setDeparture(e.target.value)}
-                    className="w-full rounded-xl border border-emerald-200 bg-emerald-50/40 px-3.5 py-2 text-sm font-semibold text-emerald-800 focus:border-emerald-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block font-bold text-[#1E3A8A]">
-                    🛬 Arrival
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Not specified"
-                    value={arrival}
-                    onChange={(e) => setArrival(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block font-bold text-[#0F2952]">
-                  Purpose / Note
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. I am going for a business trip"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2952] focus:border-[#1D4ED8] focus:outline-none"
-                />
+
+                <label className="block text-xs font-bold text-[#344456]">
+                  Departure location *
+                  <input
+                    required
+                    value={form.origin_name}
+                    onChange={(e) => updateField("origin_name", e.target.value)}
+                    placeholder="City or place of departure"
+                    className={inputClass()}
+                  />
+                </label>
+
+                <label className="block text-xs font-bold text-[#344456]">
+                  Departure address
+                  <input
+                    value={form.origin_address}
+                    onChange={(e) => updateField("origin_address", e.target.value)}
+                    placeholder="Street address (optional)"
+                    className={inputClass()}
+                  />
+                </label>
+
+                <label className="block text-xs font-bold text-[#344456]">
+                  Destination *
+                  <input
+                    required
+                    value={form.destination_name}
+                    onChange={(e) => updateField("destination_name", e.target.value)}
+                    placeholder="City or destination"
+                    className={inputClass()}
+                  />
+                </label>
+
+                <label className="block text-xs font-bold text-[#344456]">
+                  Destination address
+                  <input
+                    value={form.destination_address}
+                    onChange={(e) => updateField("destination_address", e.target.value)}
+                    placeholder="Street address (optional)"
+                    className={inputClass()}
+                  />
+                </label>
               </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="cursor-pointer rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="cursor-pointer rounded-xl bg-[#F5A623] px-4 py-2 text-sm font-extrabold text-[#0F2952] shadow-xs hover:bg-[#FBBF24]"
-                >
-                  Save Journey
-                </button>
+              <h4 className="mb-4 mt-7 text-sm font-extrabold text-[#071D49]">
+                Travel schedule
+              </h4>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-xs font-bold text-[#344456]">
+                  Departure date and time *
+                  <input
+                    type="datetime-local"
+                    required
+                    value={form.departure_at}
+                    onChange={(e) => updateField("departure_at", e.target.value)}
+                    className={inputClass()}
+                  />
+                </label>
+
+                <label className="block text-xs font-bold text-[#344456]">
+                  Expected arrival
+                  <input
+                    type="datetime-local"
+                    value={form.expected_arrival_at}
+                    onChange={(e) => updateField("expected_arrival_at", e.target.value)}
+                    className={inputClass()}
+                  />
+                </label>
               </div>
+
+              <h4 className="mb-3 mt-7 text-xs font-bold text-[#344456]">
+                Transport mode
+              </h4>
+
+              <div className="flex flex-wrap gap-2">
+                {MODES.map((mode) => (
+                  <button
+                    key={mode.value}
+                    type="button"
+                    onClick={() => updateField("transport_mode", mode.value)}
+                    className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-xs font-bold transition ${
+                      form.transport_mode === mode.value
+                        ? "border-[#F28C28] bg-orange-50 text-[#A94E0B]"
+                        : "border-[#E2E7EE] bg-white text-[#687789]"
+                    }`}
+                  >
+                    <span>{mode.icon}</span>
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+
+              <label className="mt-6 block text-xs font-bold text-[#344456]">
+                Additional notes
+                <textarea
+                  rows={4}
+                  value={form.notes}
+                  onChange={(e) => updateField("notes", e.target.value)}
+                  placeholder="Travel details or information for your reference"
+                  className={inputClass()}
+                />
+              </label>
+
+              <div className="mt-5 rounded-xl bg-[#FFF4DF] p-3 text-xs leading-5 text-[#79531C]">
+                New journeys are saved as drafts. You can schedule them after reviewing the details.
+              </div>
+
+              {notice && (
+                <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  {notice}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="mt-5 flex min-h-12 w-full items-center justify-center rounded-xl bg-[#071D49] px-5 py-3 text-sm font-extrabold text-white transition hover:bg-blue-900 disabled:opacity-60"
+              >
+                {saving
+                  ? "Saving..."
+                  : editing
+                    ? "✓ Save changes"
+                    : "✓ Save journey"}
+              </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {modal === "details" && selected && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#071D49]/65 p-3 backdrop-blur-sm sm:p-5">
+          <div className="flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-[#F4F6F9] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#E2E7EE] bg-white px-5 py-4">
+              <h3 className="text-base font-extrabold text-[#172536]">
+                Journey details
+              </h3>
+              <button
+                type="button"
+                onClick={closeModal}
+                disabled={saving}
+                aria-label="Close details"
+                className="rounded-xl bg-[#F4F6F9] px-3 py-2 text-lg text-[#172536]"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-5 sm:p-6">
+              <div className="flex flex-col items-center py-4 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-100 text-2xl">
+                  ➤
+                </div>
+                <h4 className="mt-3 text-lg font-extrabold text-[#172536]">
+                  {selected.journey_name}
+                </h4>
+                <span className={`mt-3 rounded-full px-3 py-1.5 text-xs font-extrabold ${STATUS_COLORS[selected.status]}`}>
+                  {statusLabel(selected.status)}
+                </span>
+              </div>
+
+              <div className="mt-3 rounded-xl border border-[#E2E7EE] bg-white p-4">
+                <h4 className="mb-4 text-xs font-extrabold text-[#071D49]">Route</h4>
+                <div className="flex gap-3">
+                  <span className="mt-1 h-3 w-3 shrink-0 rounded-full border-2 border-emerald-600" />
+                  <div>
+                    <p className="text-[10px] font-extrabold tracking-wider text-[#687789]">FROM</p>
+                    <p className="mt-1 text-sm font-bold text-[#172536]">{selected.origin_name}</p>
+                    {selected.origin_address && (
+                      <p className="mt-1 text-xs text-[#687789]">{selected.origin_address}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="my-4 ml-1.5 h-5 border-l border-dashed border-slate-300" />
+                <div className="flex gap-3">
+                  <span className="mt-1 h-3 w-3 shrink-0 rounded-sm bg-[#F28C28]" />
+                  <div>
+                    <p className="text-[10px] font-extrabold tracking-wider text-[#687789]">TO</p>
+                    <p className="mt-1 text-sm font-bold text-[#172536]">{selected.destination_name}</p>
+                    {selected.destination_address && (
+                      <p className="mt-1 text-xs text-[#687789]">{selected.destination_address}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-xl border border-[#E2E7EE] bg-white p-4">
+                <h4 className="mb-3 text-xs font-extrabold text-[#071D49]">Schedule and travel</h4>
+                {[
+                  ["Departure", formatDate(selected.departure_at)],
+                  ["Expected arrival", formatDate(selected.expected_arrival_at)],
+                  ["Transport", selected.transport_mode.toUpperCase()],
+                  ["Timezone", selected.departure_timezone],
+                  ...(selected.started_at ? [["Started", formatDate(selected.started_at)]] : []),
+                  ...(selected.completed_at ? [["Completed", formatDate(selected.completed_at)]] : []),
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-4 border-b border-slate-100 py-3 last:border-0">
+                    <span className="text-xs text-[#687789]">{label}</span>
+                    <span className="text-right text-xs font-bold text-[#172536]">{value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {selected.notes && (
+                <div className="mt-3 rounded-xl border border-[#E2E7EE] bg-white p-4">
+                  <h4 className="mb-2 text-xs font-extrabold text-[#071D49]">Notes</h4>
+                  <p className="whitespace-pre-wrap text-sm leading-6 text-[#445366]">{selected.notes}</p>
+                </div>
+              )}
+
+              <div className="mt-3">
+                <JourneyTravellerGpsPanel
+                  journey={selected}
+                  onUpdated={updateSelectedGps}
+                />
+              </div>
+
+              {selected.status === "draft" && (
+                <>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void changeStatus(selected, "scheduled")}
+                    className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-50"
+                  >
+                    Schedule journey
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => openEdit(selected)}
+                    className="mt-2 flex min-h-11 w-full items-center justify-center rounded-xl border border-[#E2E7EE] bg-white px-4 py-3 text-sm font-bold text-[#071D49] disabled:opacity-50"
+                  >
+                    Edit journey
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void changeStatus(selected, "cancelled")}
+                    className="mt-2 w-full p-3 text-xs font-bold text-red-600 disabled:opacity-50"
+                  >
+                    Cancel journey
+                  </button>
+                </>
+              )}
+
+              {selected.status === "scheduled" && (
+                <>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void changeStatus(selected, "active")}
+                    className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-50"
+                  >
+                    Start journey
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => openEdit(selected)}
+                    className="mt-2 flex min-h-11 w-full items-center justify-center rounded-xl border border-[#E2E7EE] bg-white px-4 py-3 text-sm font-bold text-[#071D49] disabled:opacity-50"
+                  >
+                    Edit journey
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void changeStatus(selected, "cancelled")}
+                    className="mt-2 w-full p-3 text-xs font-bold text-red-600 disabled:opacity-50"
+                  >
+                    Cancel journey
+                  </button>
+                </>
+              )}
+
+              {selected.status === "active" && (
+                <>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void changeStatus(selected, "completed")}
+                    className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-50"
+                  >
+                    Complete journey
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void changeStatus(selected, "cancelled")}
+                    className="mt-2 w-full p-3 text-xs font-bold text-red-600 disabled:opacity-50"
+                  >
+                    Cancel journey
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={closeModal}
+                disabled={saving}
+                className="mt-3 w-full rounded-xl border border-[#E2E7EE] bg-white px-4 py-3 text-sm font-bold text-[#687789]"
+              >
+                Close details
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>
