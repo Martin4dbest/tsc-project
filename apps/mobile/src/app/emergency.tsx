@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import { supabase } from '../../lib/supabase';
@@ -48,6 +50,9 @@ type EmergencyAlert = {
   description: string | null;
   reported_at: string;
   location_address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  journey_id: string | null;
 };
 
 type CapturedLocation = {
@@ -56,45 +61,60 @@ type CapturedLocation = {
   accuracy: number | null;
 };
 
-const NAVY = '#071D49';
-const ORANGE = '#F28C28';
-const PAGE = '#F4F6F9';
-const INK = '#172536';
-const MUTED = '#687789';
-const BORDER = '#E2E7EE';
-const RED = '#DC2626';
+const COLORS = {
+  navy: '#071D49',
+  navyMid: '#13386B',
+  orange: '#F28C28',
+  orangeSoft: '#FFF4E8',
+  page: '#F4F6F9',
+  white: '#FFFFFF',
+  ink: '#172536',
+  muted: '#64748B',
+  border: '#E2E8F0',
+  red: '#DC2626',
+  redSoft: '#FEF2F2',
+  redBorder: '#FECACA',
+  emerald: '#059669',
+  emeraldSoft: '#ECFDF5',
+  amberSoft: '#FFFBEB',
+};
 
 const categories: {
   value: EmergencyCategory;
   label: string;
-  icon: string;
+  emoji: string;
 }[] = [
-  { value: 'medical', label: 'Medical', icon: '✚' },
-  { value: 'accident', label: 'Accident', icon: '🚗' },
-  { value: 'security', label: 'Security', icon: '🛡' },
-  { value: 'natural_disaster', label: 'Natural disaster', icon: '⚠' },
-  { value: 'transport', label: 'Transport', icon: '🚌' },
-  { value: 'other', label: 'Other', icon: '•••' },
+  { value: 'medical', label: 'Medical', emoji: '🩺' },
+  { value: 'accident', label: 'Accident', emoji: '🚗' },
+  { value: 'security', label: 'Security', emoji: '🛡️' },
+  { value: 'natural_disaster', label: 'Natural disaster', emoji: '⚠️' },
+  { value: 'transport', label: 'Transport', emoji: '🚌' },
+  { value: 'other', label: 'Other', emoji: '🧭' },
 ];
 
 const severities: {
   value: EmergencySeverity;
   label: string;
+  emoji: string;
   color: string;
+  bg: string;
 }[] = [
-  { value: 'low', label: 'Low', color: '#0D9488' },
-  { value: 'moderate', label: 'Moderate', color: '#D97706' },
-  { value: 'high', label: 'High', color: '#EA580C' },
-  { value: 'critical', label: 'Critical', color: '#DC2626' },
+  { value: 'low', label: 'Low', emoji: '🟢', color: '#0F766E', bg: '#F0FDFA' },
+  { value: 'moderate', label: 'Moderate', emoji: '🟡', color: '#B45309', bg: '#FFFBEB' },
+  { value: 'high', label: 'High', emoji: '🟠', color: '#C2410C', bg: '#FFF7ED' },
+  { value: 'critical', label: 'Critical', emoji: '🔴', color: '#B91C1C', bg: '#FEF2F2' },
 ];
 
-const statusColors: Record<EmergencyStatus, string> = {
-  reported: '#D97706',
-  acknowledged: '#2563EB',
-  assigned: '#7C3AED',
-  responding: '#EA580C',
-  resolved: '#059669',
-  cancelled: '#64748B',
+const statusMeta: Record<
+  EmergencyStatus,
+  { label: string; color: string; bg: string }
+> = {
+  reported: { label: 'Reported', color: '#B45309', bg: '#FFFBEB' },
+  acknowledged: { label: 'Acknowledged', color: '#1D4ED8', bg: '#EFF6FF' },
+  assigned: { label: 'Responder assigned', color: '#6D28D9', bg: '#F5F3FF' },
+  responding: { label: 'Response in progress', color: '#C2410C', bg: '#FFF7ED' },
+  resolved: { label: 'Resolved', color: '#047857', bg: '#ECFDF5' },
+  cancelled: { label: 'Cancelled', color: '#475569', bg: '#F1F5F9' },
 };
 
 function formatDate(value: string) {
@@ -110,10 +130,6 @@ function formatDate(value: string) {
   });
 }
 
-function formatStatus(status: EmergencyStatus) {
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
 function reference(id: string) {
   return `TSC-${id.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
 }
@@ -126,81 +142,93 @@ export default function EmergencyScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [journeys, setJourneys] = useState<Journey[]>([]);
-  const [selectedJourneyId, setSelectedJourneyId] = useState<string | null>(null);
+  const [selectedJourneyId, setSelectedJourneyId] = useState<string>('');
   const [location, setLocation] = useState<CapturedLocation | null>(null);
-  const [locationMessage, setLocationMessage] = useState(
-    'Location has not been added. You can still submit your report.',
-  );
   const [alerts, setAlerts] = useState<EmergencyAlert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [capturingLocation, setCapturingLocation] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [submitted, setSubmitted] = useState<EmergencyAlert | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const goToLogin = useCallback(() => {
+    router.replace('/login' as never);
+  }, [router]);
 
-    try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+  const loadData = useCallback(
+    async (quiet = false) => {
+      if (quiet) setRefreshing(true);
+      else setLoading(true);
 
-      if (sessionError || !session) {
-        router.replace('/login');
-        return;
+      setError('');
+
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError || !session) {
+          goToLogin();
+          return;
+        }
+
+        const [journeyResult, alertResult] = await Promise.all([
+          supabase
+            .from('journeys')
+            .select('id, journey_name, status')
+            .eq('traveller_id', session.user.id)
+            .eq('status', 'active')
+            .order('departure_at', { ascending: true }),
+
+          supabase
+            .from('emergency_alerts')
+            .select('*')
+            .eq('traveller_id', session.user.id)
+            .order('reported_at', { ascending: false })
+            .limit(30),
+        ]);
+
+        if (journeyResult.error) throw journeyResult.error;
+        if (alertResult.error) throw alertResult.error;
+
+        const availableJourneys = (journeyResult.data ?? []) as Journey[];
+        setJourneys(availableJourneys);
+        setAlerts((alertResult.data ?? []) as EmergencyAlert[]);
+
+        if (
+          selectedJourneyId &&
+          !availableJourneys.some((journey) => journey.id === selectedJourneyId)
+        ) {
+          setSelectedJourneyId('');
+        }
+      } catch (err) {
+        console.error('Emergency data loading failed:', err);
+        setError(
+          'We could not load all your emergency information. Please refresh and try again.'
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-
-      const [journeyResult, alertResult] = await Promise.all([
-        supabase
-          .from('journeys')
-          .select('id, journey_name, status')
-          .eq('traveller_id', session.user.id)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false }),
-
-        supabase
-          .from('emergency_alerts')
-          .select('*')
-          .eq('traveller_id', session.user.id)
-          .order('reported_at', { ascending: false })
-          .limit(20),
-      ]);
-
-      if (journeyResult.error) throw journeyResult.error;
-      if (alertResult.error) throw alertResult.error;
-
-      const availableJourneys = (journeyResult.data ?? []) as Journey[];
-      setJourneys(availableJourneys);
-      setAlerts((alertResult.data ?? []) as EmergencyAlert[]);
-
-      if (
-        selectedJourneyId &&
-        !availableJourneys.some((journey) => journey.id === selectedJourneyId)
-      ) {
-        setSelectedJourneyId(null);
-      }
-    } catch (err) {
-      console.error('Emergency data loading failed:', err);
-      setError('We could not load your emergency information. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, [router, selectedJourneyId]);
+    },
+    [goToLogin, selectedJourneyId]
+  );
 
   useFocusEffect(
     useCallback(() => {
       void loadData();
-    }, [loadData]),
+    }, [loadData])
   );
 
   const captureLocation = async () => {
-    if (capturingLocation) return;
+    if (locating) return;
 
-    setCapturingLocation(true);
-    setLocationMessage('Checking location permission...');
+    setError('');
+    setNotice('');
+    setLocating(true);
 
     try {
       let permission = await Location.getForegroundPermissionsAsync();
@@ -211,8 +239,8 @@ export default function EmergencyScreen() {
 
       if (!permission.granted) {
         setLocation(null);
-        setLocationMessage(
-          'Location permission was not granted. You can still submit your emergency report.',
+        setError(
+          'Location permission was denied. You can still submit an emergency without GPS coordinates.'
         );
         return;
       }
@@ -220,230 +248,252 @@ export default function EmergencyScreen() {
       const servicesEnabled = await Location.hasServicesEnabledAsync();
 
       if (!servicesEnabled) {
-        setLocationMessage(
-          'Device location services are turned off. You can still submit without GPS.',
+        setError(
+          'Your location could not be obtained. You can still submit without GPS coordinates.'
         );
         return;
       }
-
-      setLocationMessage('Getting your current location...');
 
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
 
-      const captured: CapturedLocation = {
+      setLocation({
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy ?? null,
-      };
-
-      setLocation(captured);
-      setLocationMessage('Current location added to your emergency report.');
+        accuracy: Number.isFinite(position.coords.accuracy)
+          ? position.coords.accuracy
+          : null,
+      });
+      setNotice('Your current location has been captured for this report.');
     } catch (err) {
       console.warn('Emergency location capture failed:', err);
       setLocation(null);
-      setLocationMessage(
-        'We could not get your location. You can still submit your emergency report.',
+      setError(
+        'Your location could not be obtained. You can still submit without GPS coordinates.'
       );
     } finally {
-      setCapturingLocation(false);
+      setLocating(false);
     }
   };
 
-  const submitEmergency = async () => {
+  const submitEmergency = () => {
     if (saving) return;
 
-    const cleanTitle = title.trim();
-    const cleanDescription = description.trim();
-
-    if (!cleanTitle) {
-      Alert.alert('Emergency title required', 'Please briefly describe the emergency.');
-      return;
-    }
-
-    if (cleanTitle.length > 160) {
-      Alert.alert('Title too long', 'Please keep the title within 160 characters.');
-      return;
-    }
-
-    setSaving(true);
     setError('');
+    setNotice('');
 
-    try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError || !session) {
-        router.replace('/login');
-        return;
-      }
-
-      const payload = {
-        traveller_id: session.user.id,
-        journey_id: selectedJourneyId,
-        category,
-        severity,
-        title: cleanTitle,
-        description: cleanDescription || null,
-        latitude: location?.latitude ?? null,
-        longitude: location?.longitude ?? null,
-        location_accuracy_meters: location?.accuracy ?? null,
-      };
-
-      const { data, error: insertError } = await supabase
-        .from('emergency_alerts')
-        .insert(payload)
-        .select('*')
-        .single();
-
-      if (insertError) throw insertError;
-
-      const newAlert = data as EmergencyAlert;
-
-      setSubmitted(newAlert);
-      setTitle('');
-      setDescription('');
-      setCategory('other');
-      setSeverity('high');
-      setSelectedJourneyId(null);
-      setLocation(null);
-      setLocationMessage('Location has not been added.');
-
-      await loadData();
-    } catch (err) {
-      console.error('Emergency submission failed:', err);
-      setError(
-        'Your emergency report could not be submitted. Please check your connection and try again.',
-      );
-    } finally {
-      setSaving(false);
+    const cleanTitle = title.trim();
+    if (!cleanTitle || cleanTitle.length > 160) {
+      setError('Enter an emergency title between 1 and 160 characters.');
+      return;
     }
+
+    if (
+      selectedJourneyId &&
+      !journeys.some((journey) => journey.id === selectedJourneyId)
+    ) {
+      setError('Please select one of your currently active journeys.');
+      return;
+    }
+
+    Alert.alert(
+      '🚨 Submit emergency report?',
+      'Submit this emergency report to TSC? If you are in immediate danger, contact local emergency services now as well.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Submit report',
+          style: 'destructive',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              const {
+                data: { session },
+                error: sessionError,
+              } = await supabase.auth.getSession();
+
+              if (sessionError || !session) {
+                goToLogin();
+                return;
+              }
+
+              const { data, error: insertError } = await supabase
+                .from('emergency_alerts')
+                .insert({
+                  traveller_id: session.user.id,
+                  journey_id: selectedJourneyId || null,
+                  category,
+                  severity,
+                  title: cleanTitle,
+                  description: description.trim() || null,
+                  latitude: location?.latitude ?? null,
+                  longitude: location?.longitude ?? null,
+                  location_accuracy_meters: location?.accuracy ?? null,
+                  status: 'reported',
+                })
+                .select('*')
+                .single();
+
+              if (insertError) throw insertError;
+
+              const newAlert = data as EmergencyAlert;
+              setSubmitted(newAlert);
+              setTitle('');
+              setDescription('');
+              setCategory('other');
+              setSeverity('high');
+              setSelectedJourneyId('');
+              setLocation(null);
+
+              await loadData(true);
+            } catch (err: unknown) {
+              const msg =
+                err instanceof Error
+                  ? err.message
+                  : 'Your emergency report could not be submitted. Please try again.';
+              console.error('Emergency submission failed:', err);
+              setError(msg);
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.loadingScreen}>
-        <StatusBar barStyle="dark-content" />
-        <ActivityIndicator size="large" color={ORANGE} />
-        <Text style={styles.loadingText}>Loading emergency services...</Text>
-      </SafeAreaView>
-    );
-  }
-
-  if (submitted) {
-    return (
-      <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-        <StatusBar barStyle="dark-content" />
-        <ScrollView contentContainerStyle={styles.successContent}>
-          <View style={styles.successIcon}>
-            <Text style={styles.successIconText}>✓</Text>
-          </View>
-
-          <Text style={styles.successEyebrow}>TSC EMERGENCY OPERATIONS</Text>
-          <Text style={styles.successTitle}>Report submitted</Text>
-          <Text style={styles.successDescription}>
-            Your emergency report has been recorded. TSC emergency operations can now
-            review the report according to the response process.
-          </Text>
-
-          <View style={styles.referenceCard}>
-            <Text style={styles.referenceLabel}>YOUR EMERGENCY REFERENCE</Text>
-            <Text style={styles.referenceValue}>{reference(submitted.id)}</Text>
-            <View style={styles.referenceDivider} />
-            <View style={styles.referenceRow}>
-              <Text style={styles.referenceMeta}>Status</Text>
-              <Text style={[styles.referenceStatus, { color: statusColors[submitted.status] }]}>
-                {formatStatus(submitted.status)}
-              </Text>
-            </View>
-            <View style={styles.referenceRow}>
-              <Text style={styles.referenceMeta}>Reported</Text>
-              <Text style={styles.referenceValueSmall}>
-                {formatDate(submitted.reported_at)}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.importantNotice}>
-            <Text style={styles.noticeTitle}>Important safety notice</Text>
-            <Text style={styles.noticeText}>
-              If you are in immediate danger or need urgent medical or police assistance,
-              contact the relevant local emergency services directly. Submitting a TSC
-              report does not replace contacting emergency services.
-            </Text>
-          </View>
-
-          <Pressable style={styles.primaryButton} onPress={() => setSubmitted(null)}>
-            <Text style={styles.primaryButtonText}>Return to emergency services</Text>
-          </Pressable>
-
-          <Pressable style={styles.secondaryButton} onPress={() => router.replace('/dashboard')}>
-            <Text style={styles.secondaryButtonText}>Back to dashboard</Text>
-          </Pressable>
-        </ScrollView>
+        <StatusBar barStyle="light-content" />
+        <Text style={styles.loadingEmoji}>🚨</Text>
+        <ActivityIndicator size="large" color={COLORS.orange} />
+        <Text style={styles.loadingText}>Loading emergency operations…</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle="light-content" />
+
+      {/* Top Navigation Bar */}
+      <View style={styles.topBar}>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Back to dashboard"
+        >
+          <Ionicons name="arrow-back" size={20} color={COLORS.white} />
+        </Pressable>
+        <View style={styles.topBarText}>
+          <Text style={styles.topBarEyebrow}>🚨 EMERGENCY OPERATIONS</Text>
+          <Text style={styles.topBarTitle}>Emergency Support</Text>
+        </View>
+        <View style={styles.sosBadge}>
+          <Text style={styles.sosBadgeText}>SOS</Text>
+        </View>
+      </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void loadData(true)}
+            tintColor={COLORS.orange}
+          />
+        }
       >
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backButtonText}>‹</Text>
-          </Pressable>
-          <View style={styles.headerText}>
-            <Text style={styles.headerEyebrow}>TRAVELLER SAFETY</Text>
-            <Text style={styles.headerTitle}>Emergency services</Text>
-          </View>
-          <View style={styles.headerMark}>
-            <Text style={styles.headerMarkText}>TSC</Text>
+        {/* Hero Header */}
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTitle}>Emergency support 🆘</Text>
+          <Text style={styles.heroSubtitle}>
+            Report a travel-related emergency and keep track of live updates to your report.
+          </Text>
+
+          <View style={styles.warningBox}>
+            <Text style={styles.warningEmoji}>⚠️</Text>
+            <View style={styles.flexOne}>
+              <Text style={styles.warningTitle}>Need immediate help?</Text>
+              <Text style={styles.warningBody}>
+                TSC is not a replacement for police, ambulance, fire or other local emergency services. Contact the appropriate local emergency service immediately if anyone is in danger.
+              </Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.emergencyBanner}>
-          <View style={styles.bannerIcon}>
-            <Text style={styles.bannerIconText}>SOS</Text>
+        {/* Submission Success Banner */}
+        {submitted && (
+          <View style={styles.successCard}>
+            <View style={styles.successTop}>
+              <View style={styles.successCheck}>
+                <Text style={styles.successCheckText}>✓</Text>
+              </View>
+              <View style={styles.flexOne}>
+                <Text style={styles.successEyebrow}>REPORT SUBMITTED</Text>
+                <Text style={styles.successHeading}>Your report has been received</Text>
+                <Text style={styles.successLine}>
+                  Reference: <Text style={styles.boldText}>{reference(submitted.id)}</Text>
+                </Text>
+                <Text style={styles.successLine}>
+                  Status: <Text style={styles.boldText}>Reported</Text>. Keep this reference for your records.
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setSubmitted(null)}
+                style={styles.dismissButton}
+                accessibilityLabel="Dismiss confirmation"
+              >
+                <Ionicons name="close" size={18} color="#065F46" />
+              </Pressable>
+            </View>
           </View>
-          <View style={styles.bannerText}>
-            <Text style={styles.bannerTitle}>Need emergency assistance?</Text>
-            <Text style={styles.bannerDescription}>
-              Submit an emergency report to TSC operations. Provide your location and
-              details when it is safe to do so.
-            </Text>
+        )}
+
+        {!!notice && (
+          <View style={styles.noticeBanner}>
+            <Text style={styles.noticeBannerText}>✅ {notice}</Text>
           </View>
-        </View>
+        )}
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Report an emergency</Text>
-          <Text style={styles.requiredHint}>* Required</Text>
-        </View>
+        {!!error && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>⚠️ {error}</Text>
+          </View>
+        )}
 
-        <View style={styles.formCard}>
+        {/* Section 01: New Emergency Report */}
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <View>
+              <Text style={styles.panelEyebrow}>NEW EMERGENCY REPORT · 01</Text>
+              <Text style={styles.panelTitle}>📝 Tell us what happened</Text>
+            </View>
+            <View style={styles.alertSymbol}>
+              <Text style={styles.alertSymbolText}>!</Text>
+            </View>
+          </View>
+
+          {/* Category */}
           <Text style={styles.label}>Emergency category *</Text>
           <View style={styles.categoryGrid}>
             {categories.map((item) => {
               const selected = category === item.value;
-
               return (
                 <Pressable
                   key={item.value}
                   onPress={() => setCategory(item.value)}
                   style={[
-                    styles.categoryOption,
-                    selected && styles.categoryOptionSelected,
+                    styles.categoryTile,
+                    selected && styles.categoryTileSelected,
                   ]}
                 >
-                  <Text style={styles.categoryIcon}>{item.icon}</Text>
+                  <Text style={styles.categoryEmoji}>{item.emoji}</Text>
                   <Text
                     style={[
                       styles.categoryLabel,
@@ -457,24 +507,24 @@ export default function EmergencyScreen() {
             })}
           </View>
 
-          <Text style={styles.label}>Severity *</Text>
-          <View style={styles.severityRow}>
+          {/* Severity */}
+          <Text style={styles.label}>Severity level *</Text>
+          <View style={styles.severityGrid}>
             {severities.map((item) => {
               const selected = severity === item.value;
-
               return (
                 <Pressable
                   key={item.value}
                   onPress={() => setSeverity(item.value)}
                   style={[
-                    styles.severityOption,
+                    styles.severityTile,
                     selected && {
                       borderColor: item.color,
-                      backgroundColor: `${item.color}12`,
+                      backgroundColor: item.bg,
                     },
                   ]}
                 >
-                  <View style={[styles.severityDot, { backgroundColor: item.color }]} />
+                  <Text style={styles.severityEmoji}>{item.emoji}</Text>
                   <Text
                     style={[
                       styles.severityLabel,
@@ -488,23 +538,25 @@ export default function EmergencyScreen() {
             })}
           </View>
 
+          {/* Title */}
           <Text style={styles.label}>Emergency title *</Text>
           <TextInput
             value={title}
             onChangeText={setTitle}
-            placeholder="Briefly describe what happened"
+            placeholder="Briefly describe the emergency"
             placeholderTextColor="#94A3B8"
             style={styles.input}
             maxLength={160}
             returnKeyType="next"
           />
-          <Text style={styles.characterCount}>{title.length}/160</Text>
+          <Text style={styles.charCount}>{title.length}/160</Text>
 
-          <Text style={styles.label}>Additional details</Text>
+          {/* Additional Details */}
+          <Text style={styles.label}>Additional details (optional)</Text>
           <TextInput
             value={description}
             onChangeText={setDescription}
-            placeholder="Describe the situation, people involved or assistance needed..."
+            placeholder="Describe what happened and any assistance required"
             placeholderTextColor="#94A3B8"
             style={[styles.input, styles.textArea]}
             multiline
@@ -512,169 +564,194 @@ export default function EmergencyScreen() {
             maxLength={2000}
           />
 
-          <Text style={styles.label}>Link an active journey</Text>
+          {/* Link Active Journey */}
+          <Text style={styles.label}>🧭 Link to an active journey (optional)</Text>
           {journeys.length === 0 ? (
-            <View style={styles.emptyJourney}>
+            <View style={styles.emptyJourneyBox}>
               <Text style={styles.emptyJourneyText}>
-                No active journey found. You can still submit your emergency report.
+                No active journeys found. You can still submit an emergency report.
               </Text>
             </View>
           ) : (
-            <View style={styles.journeyOptions}>
+            <View style={styles.journeyList}>
               <Pressable
-                onPress={() => setSelectedJourneyId(null)}
+                onPress={() => setSelectedJourneyId('')}
                 style={[
                   styles.journeyOption,
-                  selectedJourneyId === null && styles.journeyOptionSelected,
+                  selectedJourneyId === '' && styles.journeyOptionSelected,
                 ]}
               >
                 <Text
                   style={[
                     styles.journeyOptionText,
-                    selectedJourneyId === null && styles.journeyOptionTextSelected,
+                    selectedJourneyId === '' && styles.journeyOptionTextSelected,
                   ]}
                 >
-                  No journey linked
+                  No journey selected
                 </Text>
               </Pressable>
 
-              {journeys.map((journey) => (
-                <Pressable
-                  key={journey.id}
-                  onPress={() => setSelectedJourneyId(journey.id)}
-                  style={[
-                    styles.journeyOption,
-                    selectedJourneyId === journey.id && styles.journeyOptionSelected,
-                  ]}
-                >
-                  <Text
+              {journeys.map((journey) => {
+                const active = selectedJourneyId === journey.id;
+                return (
+                  <Pressable
+                    key={journey.id}
+                    onPress={() => setSelectedJourneyId(journey.id)}
                     style={[
-                      styles.journeyOptionText,
-                      selectedJourneyId === journey.id &&
-                        styles.journeyOptionTextSelected,
+                      styles.journeyOption,
+                      active && styles.journeyOptionSelected,
                     ]}
                   >
-                    {journey.journey_name}
-                  </Text>
-                </Pressable>
-              ))}
+                    <Text
+                      style={[
+                        styles.journeyOptionText,
+                        active && styles.journeyOptionTextSelected,
+                      ]}
+                    >
+                      🗺️ {journey.journey_name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
 
-          <Text style={styles.label}>Your current location</Text>
-          <View style={styles.locationCard}>
-            <View style={styles.locationTextBlock}>
-              <Text style={styles.locationTitle}>
-                {location ? 'Location captured' : 'Location is optional'}
+          {/* Location Attachment Box */}
+          <View style={styles.locationBox}>
+            <View style={styles.flexOne}>
+              <Text style={styles.locationTitle}>📍 Attach your current location</Text>
+              <Text style={styles.locationDesc}>
+                {location
+                  ? `Coordinates captured (accuracy approx. ${Math.round(location.accuracy ?? 0)} m).`
+                  : 'Optional. Your device will ask permission before sharing your location.'}
               </Text>
-              <Text style={styles.locationDescription}>{locationMessage}</Text>
               {location && (
-                <Text style={styles.coordinates}>
-                  {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-                  {location.accuracy !== null
-                    ? ` · ±${Math.round(location.accuracy)} m`
-                    : ''}
+                <Text style={styles.coordsText}>
+                  {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}
                 </Text>
               )}
             </View>
-            <Pressable
-              onPress={captureLocation}
-              disabled={capturingLocation}
-              style={styles.locationButton}
-            >
-              {capturingLocation ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.locationButtonText}>
-                  {location ? 'Refresh' : 'Add GPS'}
-                </Text>
+
+            <View style={styles.locationActions}>
+              <Pressable
+                onPress={() => void captureLocation()}
+                disabled={locating}
+                style={styles.locationButton}
+              >
+                {locating ? (
+                  <ActivityIndicator size="small" color={COLORS.navy} />
+                ) : (
+                  <Text style={styles.locationButtonText}>
+                    {location ? '↻ Refresh' : '📡 Use my location'}
+                  </Text>
+                )}
+              </Pressable>
+              {location && (
+                <Pressable onPress={() => setLocation(null)}>
+                  <Text style={styles.clearLocationText}>Remove location</Text>
+                </Pressable>
               )}
-            </Pressable>
+            </View>
           </View>
 
-          {!!error && <Text style={styles.errorText}>{error}</Text>}
-
+          {/* Submit CTA */}
           <Pressable
             onPress={submitEmergency}
             disabled={saving}
             style={[styles.submitButton, saving && styles.disabledButton]}
           >
             {saving ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={COLORS.white} />
             ) : (
-              <>
-                <Text style={styles.submitButtonIcon}>!</Text>
-                <Text style={styles.submitButtonText}>SUBMIT EMERGENCY REPORT</Text>
-              </>
+              <Text style={styles.submitButtonText}>🚨 Submit emergency report</Text>
             )}
           </Pressable>
 
-          <Text style={styles.submitFootnote}>
-            Your report will be recorded securely and made available to authorised TSC
-            emergency operations personnel.
+          <Text style={styles.formFootnote}>
+            Submitting this form creates an emergency record for TSC response monitoring. Do not delay contacting local emergency services.
           </Text>
         </View>
 
-        <View style={styles.importantNotice}>
-          <Text style={styles.noticeTitle}>In immediate danger?</Text>
-          <Text style={styles.noticeText}>
-            Contact the relevant local emergency services directly. Do not wait for a
-            response through this app. TSC emergency reporting is an additional safety
-            channel, not a replacement for emergency services.
-          </Text>
-        </View>
-
-        <View style={styles.historyHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>Your emergency reports</Text>
-            <Text style={styles.historySubtitle}>Recent reports and response status</Text>
-          </View>
-          <Pressable onPress={loadData} style={styles.refreshButton}>
-            <Text style={styles.refreshText}>Refresh</Text>
-          </Pressable>
-        </View>
-
-        {alerts.length === 0 ? (
-          <View style={styles.emptyHistory}>
-            <Text style={styles.emptyHistoryTitle}>No emergency reports</Text>
-            <Text style={styles.emptyHistoryText}>
-              Reports you submit will appear here with their latest status.
-            </Text>
-          </View>
-        ) : (
-          alerts.map((alert) => (
-            <View key={alert.id} style={styles.historyCard}>
-              <View style={styles.historyTop}>
-                <Text style={styles.historyCategory}>
-                  {categories.find((item) => item.value === alert.category)?.label ??
-                    'Emergency'}
-                </Text>
-                <View
-                  style={[
-                    styles.statusPill,
-                    { backgroundColor: `${statusColors[alert.status]}15` },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusText,
-                      { color: statusColors[alert.status] },
-                    ]}
-                  >
-                    {formatStatus(alert.status)}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.historyTitle}>{alert.title}</Text>
-              <Text style={styles.historyReference}>{reference(alert.id)}</Text>
-              <Text style={styles.historyDate}>{formatDate(alert.reported_at)}</Text>
+        {/* Section 02: Emergency Report History */}
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <View>
+              <Text style={styles.panelEyebrow}>YOUR RECORDS · 02</Text>
+              <Text style={styles.panelTitle}>📋 Emergency report history</Text>
             </View>
-          ))
-        )}
+            <Pressable
+              onPress={() => void loadData(true)}
+              style={styles.refreshChip}
+            >
+              <Text style={styles.refreshChipText}>Refresh ↻</Text>
+            </Pressable>
+          </View>
+
+          {alerts.length === 0 ? (
+            <View style={styles.emptyHistory}>
+              <View style={styles.emptyIconCircle}>
+                <Text style={styles.emptyIconText}>✓</Text>
+              </View>
+              <Text style={styles.emptyHistoryTitle}>No emergency reports</Text>
+              <Text style={styles.emptyHistoryBody}>
+                Your submitted emergency reports and their response status will appear here.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.historyList}>
+              {alerts.map((alert) => {
+                const st = statusMeta[alert.status];
+                const cat = categories.find((c) => c.value === alert.category);
+                return (
+                  <View key={alert.id} style={styles.historyCard}>
+                    <View style={styles.historyTopRow}>
+                      <Text style={styles.historyMetaTag}>
+                        {cat?.emoji ?? '🚨'} {alert.category.replace('_', ' ').toUpperCase()} ·{' '}
+                        {alert.severity.toUpperCase()}
+                      </Text>
+                      <View style={[styles.statusBadge, { backgroundColor: st.bg }]}>
+                        <Text style={[styles.statusBadgeText, { color: st.color }]}>
+                          {st.label}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.historyTitle}>{alert.title}</Text>
+                    <Text style={styles.historyRef}>
+                      {reference(alert.id)} · {formatDate(alert.reported_at)}
+                    </Text>
+
+                    {!!alert.description && (
+                      <Text style={styles.historyNotes}>{alert.description}</Text>
+                    )}
+
+                    {!!alert.location_address && (
+                      <Text style={styles.historyLocation}>
+                        📍 Location: {alert.location_address}
+                      </Text>
+                    )}
+
+                    {alert.latitude !== null && alert.longitude !== null && (
+                      <Text style={styles.historyLocation}>
+                        🛰️ GPS: {alert.latitude.toFixed(5)}, {alert.longitude.toFixed(5)}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        <Text style={styles.safetyNote}>
+          TSC helps record and coordinate reported incidents. Response availability and timing may vary. Always use local emergency channels for urgent assistance.
+        </Text>
 
         <View style={styles.footer}>
-          <Text style={styles.footerBrand}>TSC</Text>
-          <Text style={styles.footerText}>TRAVELLERS SAFETY COVERED</Text>
+          <Text style={styles.footerBrand}>🛡️ TRAVELLERS SAFETY COVERED</Text>
+          <Pressable onPress={() => router.replace('/dashboard' as never)}>
+            <Text style={styles.footerLink}>Return to dashboard →</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -682,346 +759,310 @@ export default function EmergencyScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: PAGE },
+  safeArea: { flex: 1, backgroundColor: COLORS.page },
   loadingScreen: {
     flex: 1,
-    backgroundColor: PAGE,
+    backgroundColor: COLORS.navy,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  loadingText: { color: MUTED, fontSize: 13, marginTop: 12 },
-  content: { paddingHorizontal: 18, paddingBottom: 42 },
-  header: {
-    minHeight: 68,
+  loadingEmoji: { fontSize: 34, marginBottom: 12 },
+  loadingText: { color: COLORS.white, fontSize: 13, marginTop: 12, fontWeight: '600' },
+  flexOne: { flex: 1 },
+  topBar: {
+    backgroundColor: COLORS.navy,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    marginBottom: 18,
+    gap: 12,
   },
   backButton: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: BORDER,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backButtonText: { color: NAVY, fontSize: 30, lineHeight: 32, marginTop: -3 },
-  headerText: { flex: 1, marginLeft: 12 },
-  headerEyebrow: {
-    color: ORANGE,
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.1,
+  topBarText: { flex: 1 },
+  topBarEyebrow: { color: '#FDBA74', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  topBarTitle: { color: COLORS.white, fontSize: 18, fontWeight: '800', marginTop: 2 },
+  sosBadge: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: COLORS.red,
   },
-  headerTitle: { color: NAVY, fontSize: 18, fontWeight: '800', marginTop: 2 },
-  headerMark: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: NAVY,
-    alignItems: 'center',
-    justifyContent: 'center',
+  sosBadgeText: { color: COLORS.white, fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+  content: { padding: 16, paddingBottom: 42 },
+  heroCard: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
   },
-  headerMarkText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
-  emergencyBanner: {
+  heroTitle: { color: COLORS.white, fontSize: 22, fontWeight: '800' },
+  heroSubtitle: { color: '#CBD5E1', fontSize: 13, lineHeight: 19, marginTop: 6 },
+  warningBox: {
+    marginTop: 16,
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF1F0',
-    borderColor: '#FECACA',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: 'rgba(220, 38, 38, 0.16)',
     borderWidth: 1,
-    borderRadius: 17,
-    padding: 15,
-    marginBottom: 22,
+    borderColor: 'rgba(254, 202, 202, 0.35)',
+    borderRadius: 14,
+    padding: 13,
   },
-  bannerIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
-    backgroundColor: RED,
+  warningEmoji: { fontSize: 18 },
+  warningTitle: { color: '#FECACA', fontSize: 13, fontWeight: '800' },
+  warningBody: { color: '#FEE2E2', fontSize: 11, lineHeight: 17, marginTop: 3 },
+  successCard: {
+    backgroundColor: COLORS.emeraldSoft,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+  },
+  successTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  successCheck: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.emerald,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
-  bannerIconText: { color: '#FFFFFF', fontWeight: '900', fontSize: 15 },
-  bannerText: { flex: 1 },
-  bannerTitle: { color: '#991B1B', fontSize: 14, fontWeight: '800' },
-  bannerDescription: { color: '#7F1D1D', fontSize: 11, lineHeight: 16, marginTop: 4 },
-  sectionHeader: {
+  successCheckText: { color: COLORS.white, fontSize: 18, fontWeight: '900' },
+  successEyebrow: { color: '#047857', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  successHeading: { color: '#064E3B', fontSize: 16, fontWeight: '800', marginTop: 2 },
+  successLine: { color: '#065F46', fontSize: 12, marginTop: 4 },
+  boldText: { fontWeight: '800' },
+  dismissButton: { padding: 4 },
+  noticeBanner: {
+    backgroundColor: COLORS.emeraldSoft,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  noticeBannerText: { color: '#065F46', fontSize: 12, fontWeight: '600' },
+  errorBanner: {
+    backgroundColor: COLORS.redSoft,
+    borderWidth: 1,
+    borderColor: COLORS.redBorder,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  errorBannerText: { color: '#991B1B', fontSize: 12, fontWeight: '600' },
+  panel: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 16,
+    marginBottom: 16,
+  },
+  panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  sectionTitle: { color: NAVY, fontSize: 16, fontWeight: '800' },
-  requiredHint: { color: MUTED, fontSize: 10 },
-  formCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+  panelEyebrow: { color: COLORS.orange, fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  panelTitle: { color: COLORS.navy, fontSize: 17, fontWeight: '800', marginTop: 2 },
+  alertSymbol: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.redSoft,
     borderWidth: 1,
-    borderColor: BORDER,
-    padding: 15,
-  },
-  label: { color: INK, fontSize: 12, fontWeight: '800', marginTop: 17, marginBottom: 9 },
-  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  categoryOption: {
-    width: '31.5%',
-    minHeight: 78,
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    borderColor: COLORS.redBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 7,
   },
-  categoryOptionSelected: {
-    borderColor: ORANGE,
-    backgroundColor: '#FFF7ED',
+  alertSymbolText: { color: COLORS.red, fontSize: 16, fontWeight: '900' },
+  label: { color: COLORS.ink, fontSize: 12, fontWeight: '800', marginTop: 16, marginBottom: 8 },
+  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  categoryTile: {
+    width: '31.5%',
+    minHeight: 76,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 13,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
   },
-  categoryIcon: { fontSize: 20, marginBottom: 5 },
-  categoryLabel: { color: MUTED, fontSize: 10, fontWeight: '600', textAlign: 'center' },
-  categoryLabelSelected: { color: '#C2410C', fontWeight: '800' },
-  severityRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  severityOption: {
+  categoryTileSelected: {
+    borderColor: COLORS.orange,
+    backgroundColor: COLORS.orangeSoft,
+  },
+  categoryEmoji: { fontSize: 20, marginBottom: 4 },
+  categoryLabel: { color: COLORS.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  categoryLabelSelected: { color: '#9A3412', fontWeight: '800' },
+  severityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  severityTile: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
+    borderColor: COLORS.border,
+    borderRadius: 11,
+    backgroundColor: '#F8FAFC',
   },
-  severityDot: { width: 7, height: 7, borderRadius: 4 },
-  severityLabel: { color: MUTED, fontSize: 10, fontWeight: '600' },
+  severityEmoji: { fontSize: 12 },
+  severityLabel: { color: COLORS.muted, fontSize: 12, fontWeight: '700' },
   input: {
     minHeight: 46,
     borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 11,
-    paddingHorizontal: 12,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 13,
     paddingVertical: 11,
-    color: INK,
-    fontSize: 12,
-    backgroundColor: '#FFFFFF',
+    color: COLORS.ink,
+    fontSize: 13,
+    backgroundColor: '#F8FAFC',
   },
-  textArea: { minHeight: 105 },
-  characterCount: { color: MUTED, fontSize: 9, textAlign: 'right', marginTop: 5 },
-  emptyJourney: {
+  textArea: { minHeight: 96 },
+  charCount: { color: COLORS.muted, fontSize: 10, textAlign: 'right', marginTop: 4 },
+  emptyJourneyBox: {
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 10,
+    borderColor: COLORS.border,
+    borderRadius: 12,
     padding: 12,
   },
-  emptyJourneyText: { color: MUTED, fontSize: 11, lineHeight: 16 },
-  journeyOptions: { gap: 7 },
+  emptyJourneyText: { color: COLORS.muted, fontSize: 12, lineHeight: 17 },
+  journeyList: { gap: 8 },
   journeyOption: {
     borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    backgroundColor: '#FFFFFF',
-  },
-  journeyOptionSelected: { borderColor: ORANGE, backgroundColor: '#FFF7ED' },
-  journeyOptionText: { color: MUTED, fontSize: 11, fontWeight: '600' },
-  journeyOptionTextSelected: { color: '#C2410C', fontWeight: '800' },
-  locationCard: {
-    borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: COLORS.border,
     borderRadius: 12,
-    padding: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    backgroundColor: '#F8FAFC',
+  },
+  journeyOptionSelected: { borderColor: COLORS.orange, backgroundColor: COLORS.orangeSoft },
+  journeyOptionText: { color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  journeyOptionTextSelected: { color: '#9A3412', fontWeight: '800' },
+  locationBox: {
+    marginTop: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    padding: 14,
     backgroundColor: '#F8FAFC',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
-  locationTextBlock: { flex: 1 },
-  locationTitle: { color: INK, fontSize: 11, fontWeight: '800' },
-  locationDescription: { color: MUTED, fontSize: 10, lineHeight: 15, marginTop: 3 },
-  coordinates: { color: '#0D9488', fontSize: 9, marginTop: 5 },
+  locationTitle: { color: COLORS.ink, fontSize: 13, fontWeight: '800' },
+  locationDesc: { color: COLORS.muted, fontSize: 11, lineHeight: 16, marginTop: 3 },
+  coordsText: { color: COLORS.emerald, fontSize: 10, fontWeight: '700', marginTop: 4 },
+  locationActions: { alignItems: 'flex-end', gap: 6 },
   locationButton: {
-    minWidth: 76,
-    minHeight: 36,
-    borderRadius: 9,
-    backgroundColor: NAVY,
+    minHeight: 38,
+    borderRadius: 10,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
   },
-  locationButtonText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
-  errorText: { color: RED, fontSize: 11, lineHeight: 16, marginTop: 12 },
+  locationButtonText: { color: COLORS.navy, fontSize: 11, fontWeight: '800' },
+  clearLocationText: { color: COLORS.red, fontSize: 10, fontWeight: '700' },
   submitButton: {
     minHeight: 52,
-    borderRadius: 12,
-    backgroundColor: RED,
-    flexDirection: 'row',
+    borderRadius: 14,
+    backgroundColor: COLORS.red,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 22,
-    gap: 9,
+    marginTop: 20,
   },
   disabledButton: { opacity: 0.65 },
-  submitButtonIcon: { color: '#FFFFFF', fontSize: 19, fontWeight: '900' },
-  submitButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
-  submitFootnote: {
-    color: MUTED,
-    fontSize: 10,
-    lineHeight: 15,
+  submitButtonText: { color: COLORS.white, fontSize: 14, fontWeight: '800' },
+  formFootnote: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 16,
     textAlign: 'center',
     marginTop: 10,
   },
-  importantNotice: {
-    marginTop: 17,
-    borderRadius: 13,
+  refreshChip: {
     borderWidth: 1,
-    borderColor: '#FCD34D',
-    backgroundColor: '#FFFBEB',
-    padding: 14,
+    borderColor: COLORS.border,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 10,
   },
-  noticeTitle: { color: '#92400E', fontSize: 12, fontWeight: '800', marginBottom: 5 },
-  noticeText: { color: '#78350F', fontSize: 10, lineHeight: 16 },
-  historyHeader: {
-    marginTop: 26,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  historySubtitle: { color: MUTED, fontSize: 10, marginTop: 3 },
-  refreshButton: {
-    borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 9,
-  },
-  refreshText: { color: NAVY, fontSize: 10, fontWeight: '800' },
-  emptyHistory: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 13,
-    padding: 18,
-    alignItems: 'center',
-  },
-  emptyHistoryTitle: { color: INK, fontSize: 12, fontWeight: '800' },
-  emptyHistoryText: {
-    color: MUTED,
-    fontSize: 10,
-    textAlign: 'center',
-    lineHeight: 15,
-    marginTop: 5,
-  },
-  historyCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 13,
-    padding: 14,
-    marginBottom: 9,
-  },
-  historyTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  historyCategory: { color: NAVY, fontSize: 11, fontWeight: '800' },
-  statusPill: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 20 },
-  statusText: { fontSize: 9, fontWeight: '800' },
-  historyTitle: { color: INK, fontSize: 13, fontWeight: '700', marginTop: 9 },
-  historyReference: { color: ORANGE, fontSize: 9, fontWeight: '800', marginTop: 5 },
-  historyDate: { color: MUTED, fontSize: 9, marginTop: 5 },
-  footer: { alignItems: 'center', paddingTop: 30 },
-  footerBrand: { color: ORANGE, fontSize: 15, fontWeight: '900', letterSpacing: 2 },
-  footerText: { color: MUTED, fontSize: 8, fontWeight: '700', letterSpacing: 1.2, marginTop: 4 },
-  successContent: { flexGrow: 1, padding: 22, justifyContent: 'center' },
-  successIcon: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: '#DCFCE7',
+  refreshChipText: { color: COLORS.navy, fontSize: 11, fontWeight: '800' },
+  emptyHistory: { alignItems: 'center', paddingVertical: 22 },
+  emptyIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.emeraldSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
-    marginBottom: 18,
+    marginBottom: 10,
   },
-  successIconText: { color: '#15803D', fontSize: 34, fontWeight: '900' },
-  successEyebrow: {
-    color: ORANGE,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.3,
-    textAlign: 'center',
-  },
-  successTitle: {
-    color: NAVY,
-    fontSize: 23,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginTop: 7,
-  },
-  successDescription: {
-    color: MUTED,
+  emptyIconText: { color: COLORS.emerald, fontSize: 20, fontWeight: '900' },
+  emptyHistoryTitle: { color: COLORS.ink, fontSize: 14, fontWeight: '800' },
+  emptyHistoryBody: {
+    color: COLORS.muted,
     fontSize: 12,
-    lineHeight: 19,
     textAlign: 'center',
-    marginTop: 10,
+    lineHeight: 18,
+    marginTop: 4,
   },
-  referenceCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+  historyList: { gap: 10, marginTop: 6 },
+  historyCard: {
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: BORDER,
-    padding: 17,
-    marginTop: 24,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    padding: 14,
   },
-  referenceLabel: {
-    color: MUTED,
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textAlign: 'center',
-  },
-  referenceValue: {
-    color: NAVY,
-    fontSize: 23,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginTop: 8,
-    letterSpacing: 1,
-  },
-  referenceDivider: { height: 1, backgroundColor: BORDER, marginVertical: 15 },
-  referenceRow: {
+  historyTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    gap: 8,
   },
-  referenceMeta: { color: MUTED, fontSize: 11 },
-  referenceStatus: { fontSize: 11, fontWeight: '800' },
-  referenceValueSmall: { color: INK, fontSize: 10, fontWeight: '600' },
-  primaryButton: {
-    backgroundColor: NAVY,
-    borderRadius: 12,
-    minHeight: 49,
+  historyMetaTag: { color: COLORS.orange, fontSize: 10, fontWeight: '800', flex: 1 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  statusBadgeText: { fontSize: 10, fontWeight: '800' },
+  historyTitle: { color: COLORS.ink, fontSize: 14, fontWeight: '800', marginTop: 8 },
+  historyRef: { color: COLORS.muted, fontSize: 11, fontWeight: '600', marginTop: 4 },
+  historyNotes: { color: '#334155', fontSize: 12, lineHeight: 18, marginTop: 6 },
+  historyLocation: { color: COLORS.muted, fontSize: 11, marginTop: 5 },
+  safetyNote: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: 'center',
+    paddingHorizontal: 8,
+    marginTop: 4,
+  },
+  footer: {
+    marginTop: 18,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 22,
+    justifyContent: 'space-between',
   },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
-  secondaryButton: {
-    minHeight: 45,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  secondaryButtonText: { color: NAVY, fontSize: 11, fontWeight: '700' },
+  footerBrand: { color: COLORS.navy, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
+  footerLink: { color: COLORS.orange, fontSize: 12, fontWeight: '800' },
 });
