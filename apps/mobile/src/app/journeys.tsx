@@ -1,9 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,6 +19,7 @@ import { supabase } from '../../lib/supabase';
 import JourneyGpsControls from '../components/JourneyGpsControls';
 
 type JourneyStatus = 'draft' | 'scheduled' | 'active' | 'completed' | 'cancelled';
+type Filter = 'all' | 'upcoming' | 'active' | 'completed';
 
 type Journey = {
   id: string;
@@ -39,14 +41,19 @@ type Journey = {
   completed_at: string | null;
 };
 
-type Filter = 'all' | 'upcoming' | 'active' | 'completed';
-
-const NAVY = '#071D49';
-const ORANGE = '#F28C28';
-const PAGE = '#F4F6F9';
-const INK = '#172536';
-const MUTED = '#687789';
-const BORDER = '#E2E7EE';
+const COLORS = {
+  navy: '#071D49',
+  navyLight: '#102E6B',
+  orange: '#F28C28',
+  orangeSoft: '#FFF4E8',
+  page: '#F4F6F9',
+  card: '#FFFFFF',
+  ink: '#172536',
+  muted: '#64748B',
+  border: '#E2E8F0',
+  emerald: '#059669',
+  emeraldSoft: '#ECFDF5',
+};
 
 const emptyForm = {
   journey_name: '',
@@ -60,12 +67,23 @@ const emptyForm = {
   notes: '',
 };
 
-const statusColors: Record<JourneyStatus, string> = {
-  draft: '#64748B',
-  scheduled: '#2563EB',
-  active: '#059669',
-  completed: '#475569',
-  cancelled: '#DC2626',
+const MODES = [
+  { value: 'road', label: 'Road', emoji: '🚘' },
+  { value: 'air', label: 'Air', emoji: '✈️' },
+  { value: 'rail', label: 'Rail', emoji: '🚆' },
+  { value: 'sea', label: 'Sea', emoji: '🚢' },
+  { value: 'other', label: 'Other', emoji: '🧭' },
+] as const;
+
+const STATUS_META: Record<
+  JourneyStatus,
+  { label: string; emoji: string; color: string; bg: string }
+> = {
+  draft: { label: 'Draft', emoji: '📝', color: '#475569', bg: '#F1F5F9' },
+  scheduled: { label: 'Scheduled', emoji: '📅', color: '#1D4ED8', bg: '#EFF6FF' },
+  active: { label: 'Active Now', emoji: '🟢', color: '#047857', bg: '#ECFDF5' },
+  completed: { label: 'Completed', emoji: '🏁', color: '#334155', bg: '#F1F5F9' },
+  cancelled: { label: 'Cancelled', emoji: '🚫', color: '#B91C1C', bg: '#FEF2F2' },
 };
 
 function formatDate(value: string | null) {
@@ -86,8 +104,8 @@ function localDateTimeValue(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function statusLabel(status: JourneyStatus) {
-  return status.charAt(0).toUpperCase() + status.slice(1);
+function getModeEmoji(mode: string) {
+  return MODES.find((m) => m.value === mode)?.emoji ?? '🚘';
 }
 
 export default function JourneysScreen() {
@@ -99,44 +117,50 @@ export default function JourneysScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  const [search, setSearch] = useState('');
 
   const [modal, setModal] = useState<'form' | 'details' | null>(null);
   const [selected, setSelected] = useState<Journey | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(emptyForm);
 
-  const loadJourneys = useCallback(async (quiet = false) => {
-    if (quiet) setRefreshing(true);
-    else setLoading(true);
+  const loadJourneys = useCallback(
+    async (quiet = false) => {
+      if (quiet) setRefreshing(true);
+      else setLoading(true);
 
-    setError('');
+      setError('');
 
-    try {
-      const { data: { session }, error: sessionError } =
-        await supabase.auth.getSession();
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
 
-      if (sessionError || !session) {
-        router.replace('/login');
-        return;
+        if (sessionError || !session) {
+          router.replace('/login');
+          return;
+        }
+
+        const { data, error: queryError } = await supabase
+          .from('journeys')
+          .select('*')
+          .eq('traveller_id', session.user.id)
+          .order('departure_at', { ascending: true });
+
+        if (queryError) throw queryError;
+
+        setJourneys((data ?? []) as Journey[]);
+      } catch (err) {
+        console.error('Journey loading failed:', err);
+        setError('We could not load your journeys. Please try again.');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-
-      const { data, error: queryError } = await supabase
-        .from('journeys')
-        .select('*')
-        .eq('traveller_id', session.user.id)
-        .order('departure_at', { ascending: true });
-
-      if (queryError) throw queryError;
-
-      setJourneys((data ?? []) as Journey[]);
-    } catch (err) {
-      console.error('Journey loading failed:', err);
-      setError('We could not load your journeys. Please try again.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [router]);
+    },
+    [router]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -144,14 +168,37 @@ export default function JourneysScreen() {
     }, [loadJourneys])
   );
 
-  const filteredJourneys = journeys.filter((journey) => {
-    if (filter === 'all') return true;
-    if (filter === 'upcoming') {
-      return journey.status === 'draft' || journey.status === 'scheduled';
-    }
-    if (filter === 'active') return journey.status === 'active';
-    return journey.status === 'completed';
-  });
+  const counts = useMemo(
+    () => ({
+      all: journeys.length,
+      upcoming: journeys.filter((j) => j.status === 'draft' || j.status === 'scheduled').length,
+      scheduled: journeys.filter((j) => j.status === 'scheduled').length,
+      active: journeys.filter((j) => j.status === 'active').length,
+      completed: journeys.filter((j) => j.status === 'completed').length,
+    }),
+    [journeys]
+  );
+
+  const filteredJourneys = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return journeys.filter((journey) => {
+      const matchesTab =
+        filter === 'all'
+          ? true
+          : filter === 'upcoming'
+          ? journey.status === 'draft' || journey.status === 'scheduled'
+          : journey.status === filter;
+
+      if (!matchesTab) return false;
+      if (!q) return true;
+
+      return (
+        journey.journey_name.toLowerCase().includes(q) ||
+        journey.origin_name.toLowerCase().includes(q) ||
+        journey.destination_name.toLowerCase().includes(q)
+      );
+    });
+  }, [journeys, filter, search]);
 
   const openCreate = () => {
     setSelected(null);
@@ -189,7 +236,10 @@ export default function JourneysScreen() {
       !form.destination_name.trim() ||
       !form.departure_at.trim()
     ) {
-      Alert.alert('Missing information', 'Please complete the journey name, origin, destination and departure date/time.');
+      Alert.alert(
+        'Missing information',
+        'Please complete the journey name, origin, destination and departure date/time.'
+      );
       return;
     }
 
@@ -216,15 +266,16 @@ export default function JourneysScreen() {
     setSaving(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       if (!session) {
         router.replace('/login');
         return;
       }
 
-      const timezone =
-        Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
       const payload = {
         journey_name: form.journey_name.trim(),
@@ -240,15 +291,14 @@ export default function JourneysScreen() {
         notes: form.notes.trim() || null,
       };
 
-      const result = editing && selected
-        ? await supabase
-            .from('journeys')
-            .update(payload)
-            .eq('id', selected.id)
-            .eq('traveller_id', session.user.id)
-        : await supabase
-            .from('journeys')
-            .insert({
+      const result =
+        editing && selected
+          ? await supabase
+              .from('journeys')
+              .update(payload)
+              .eq('id', selected.id)
+              .eq('traveller_id', session.user.id)
+          : await supabase.from('journeys').insert({
               ...payload,
               traveller_id: session.user.id,
               status: 'draft',
@@ -262,7 +312,7 @@ export default function JourneysScreen() {
       await loadJourneys(true);
 
       Alert.alert(
-        editing ? 'Journey updated' : 'Journey saved',
+        editing ? '✅ Journey updated' : '✨ Journey saved',
         editing
           ? 'Your journey details have been updated.'
           : 'Your journey has been saved as a draft. You can schedule it from its details.'
@@ -280,54 +330,55 @@ export default function JourneysScreen() {
 
   const changeStatus = async (journey: Journey, status: JourneyStatus) => {
     const messages: Record<string, string> = {
-      scheduled: 'Schedule this journey?',
-      active: 'Start this journey now?',
-      completed: 'Mark this journey as completed?',
-      cancelled: 'Cancel this journey?',
+      scheduled: '📅 Schedule this journey?',
+      active: '🟢 Start this journey now?',
+      completed: '🏁 Mark this journey as completed?',
+      cancelled: '🚫 Cancel this journey?',
     };
 
-    Alert.alert(
-      'Confirm action',
-      messages[status] || 'Update this journey?',
-      [
-        { text: 'Go back', style: 'cancel' },
-        {
-          text: 'Confirm',
-          style: status === 'cancelled' ? 'destructive' : 'default',
-          onPress: async () => {
-            setSaving(true);
-            try {
-              const { data: { session } } = await supabase.auth.getSession();
-              if (!session) {
-                router.replace('/login');
-                return;
-              }
-
-              const { error: updateError } = await supabase
-                .from('journeys')
-                .update({ status })
-                .eq('id', journey.id)
-                .eq('traveller_id', session.user.id);
-
-              if (updateError) throw updateError;
-
-              setModal(null);
-              setSelected(null);
-              await loadJourneys(true);
-              Alert.alert('Journey updated', `Journey is now ${statusLabel(status).toLowerCase()}.`);
-            } catch (err: any) {
-              console.error('Journey status update failed:', err);
-              Alert.alert(
-                'Action unsuccessful',
-                err?.message || 'This status change could not be completed.'
-              );
-            } finally {
-              setSaving(false);
+    Alert.alert('Confirm action', messages[status] || 'Update this journey?', [
+      { text: 'Go back', style: 'cancel' },
+      {
+        text: 'Confirm',
+        style: status === 'cancelled' ? 'destructive' : 'default',
+        onPress: async () => {
+          setSaving(true);
+          try {
+            const {
+              data: { session },
+            } = await supabase.auth.getSession();
+            if (!session) {
+              router.replace('/login');
+              return;
             }
-          },
+
+            const { error: updateError } = await supabase
+              .from('journeys')
+              .update({ status })
+              .eq('id', journey.id)
+              .eq('traveller_id', session.user.id);
+
+            if (updateError) throw updateError;
+
+            setModal(null);
+            setSelected(null);
+            await loadJourneys(true);
+            Alert.alert(
+              'Journey updated',
+              `Journey is now ${STATUS_META[status].label.toLowerCase()}.`
+            );
+          } catch (err: any) {
+            console.error('Journey status update failed:', err);
+            Alert.alert(
+              'Action unsuccessful',
+              err?.message || 'This status change could not be completed.'
+            );
+          } finally {
+            setSaving(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const openDetails = (journey: Journey) => {
@@ -351,7 +402,7 @@ export default function JourneysScreen() {
         value={form[field]}
         onChangeText={(value) => updateField(field, value)}
         placeholder={placeholder}
-        placeholderTextColor="#98A3B1"
+        placeholderTextColor="#94A3B8"
         multiline={multiline}
         textAlignVertical={multiline ? 'top' : 'center'}
         style={[styles.input, multiline && styles.multilineInput]}
@@ -360,54 +411,67 @@ export default function JourneysScreen() {
     </View>
   );
 
-  const renderJourney = (journey: Journey) => (
-    <Pressable
-      key={journey.id}
-      onPress={() => openDetails(journey)}
-      style={({ pressed }) => [styles.journeyCard, pressed && styles.pressed]}
-    >
-      <View style={styles.cardTop}>
-        <View style={styles.transportIcon}>
-          <Ionicons
-            name={
-              journey.transport_mode === 'air' ? 'airplane-outline' :
-              journey.transport_mode === 'rail' ? 'train-outline' :
-              journey.transport_mode === 'sea' ? 'boat-outline' :
-              'car-outline'
-            }
-            size={20}
-            color={ORANGE}
-          />
+  const renderJourney = (journey: Journey) => {
+    const meta = STATUS_META[journey.status];
+    return (
+      <Pressable
+        key={journey.id}
+        onPress={() => openDetails(journey)}
+        style={({ pressed }) => [styles.journeyCard, pressed && styles.pressed]}
+      >
+        <View style={styles.cardTop}>
+          <View style={styles.transportEmojiBox}>
+            <Text style={styles.transportEmoji}>{getModeEmoji(journey.transport_mode)}</Text>
+          </View>
+          <View style={styles.cardTitleArea}>
+            <Text style={styles.journeyName} numberOfLines={1}>
+              {journey.journey_name}
+            </Text>
+            <Text style={styles.cardDate}>🕒 {formatDate(journey.departure_at)}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
+            <Text style={[styles.statusText, { color: meta.color }]}>
+              {meta.emoji} {meta.label}
+            </Text>
+          </View>
         </View>
-        <View style={styles.cardTitleArea}>
-          <Text style={styles.journeyName} numberOfLines={1}>{journey.journey_name}</Text>
-          <Text style={styles.cardDate}>{formatDate(journey.departure_at)}</Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: `${statusColors[journey.status]}15` }]}>
-          <Text style={[styles.statusText, { color: statusColors[journey.status] }]}>
-            {statusLabel(journey.status)}
-          </Text>
-        </View>
-      </View>
 
-      <View style={styles.route}>
-        <View style={styles.routeRail}>
-          <View style={styles.originDot} />
-          <View style={styles.routeLine} />
-          <View style={styles.destinationDot} />
+        <View style={styles.routeBox}>
+          <View style={styles.routeRail}>
+            <View style={styles.originDot} />
+            <View style={styles.routeLine} />
+            <View style={styles.destinationDot} />
+          </View>
+          <View style={styles.routeNames}>
+            <View>
+              <Text style={styles.routeMicroLabel}>FROM</Text>
+              <Text style={styles.routeName} numberOfLines={1}>
+                {journey.origin_name}
+              </Text>
+            </View>
+            <View style={{ marginTop: 10 }}>
+              <Text style={styles.routeMicroLabel}>TO</Text>
+              <Text style={styles.routeName} numberOfLines={1}>
+                {journey.destination_name}
+              </Text>
+            </View>
+          </View>
         </View>
-        <View style={styles.routeNames}>
-          <Text style={styles.routeName} numberOfLines={1}>{journey.origin_name}</Text>
-          <Text style={styles.routeName} numberOfLines={1}>{journey.destination_name}</Text>
-        </View>
-      </View>
 
-      <View style={styles.cardBottom}>
-        <Text style={styles.cardMode}>{journey.transport_mode.toUpperCase()} JOURNEY</Text>
-        <Text style={styles.viewDetails}>View details  ›</Text>
-      </View>
-    </Pressable>
-  );
+        <View style={styles.cardBottom}>
+          <View style={styles.cardMetaRow}>
+            <Text style={styles.cardMode}>{journey.transport_mode.toUpperCase()} TRIP</Text>
+            {journey.location_sharing_enabled && (
+              <View style={styles.gpsPill}>
+                <Text style={styles.gpsPillText}>📡 GPS Live</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.viewDetails}>Manage trip ›</Text>
+        </View>
+      </Pressable>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -416,121 +480,175 @@ export default function JourneysScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadJourneys(true)}
+            tintColor={COLORS.orange}
+          />
+        }
       >
+        {/* Top Bar */}
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={21} color={INK} />
+            <Ionicons name="arrow-back" size={20} color={COLORS.ink} />
           </Pressable>
           <View style={styles.headerText}>
-            <Text style={styles.eyebrow}>TRAVELLER SERVICES</Text>
-            <Text style={styles.heading}>My journeys</Text>
+            <Text style={styles.eyebrow}>🧭 TRAVELLER SERVICES</Text>
+            <Text style={styles.heading}>My Journeys</Text>
           </View>
           <Pressable onPress={openCreate} style={styles.addButton}>
-            <Ionicons name="add" size={23} color="#FFFFFF" />
+            <Ionicons name="add" size={20} color="#FFFFFF" />
+            <Text style={styles.addButtonText}>New</Text>
           </Pressable>
         </View>
 
-        <View style={styles.introCard}>
-          <View style={styles.introIcon}>
-            <Ionicons name="navigate-outline" size={25} color={ORANGE} />
+        {/* Hero Banner */}
+        <View style={styles.heroCard}>
+          <View style={styles.heroEmojiBox}>
+            <Text style={{ fontSize: 24 }}>🗺️</Text>
           </View>
-          <View style={styles.introText}>
-            <Text style={styles.introTitle}>Travel with a plan</Text>
-            <Text style={styles.introDescription}>
-              Organise your trips and keep your journey information in one place.
+          <View style={styles.heroText}>
+            <Text style={styles.heroTitle}>Travel with a clear plan ✨</Text>
+            <Text style={styles.heroDescription}>
+              Organise routes, track schedules, and manage live GPS sharing in one secure hub.
             </Text>
           </View>
         </View>
 
+        {/* KPI Summary Row */}
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>{journeys.filter(j => j.status === 'scheduled').length}</Text>
+            <Text style={styles.summaryEmoji}>📅</Text>
+            <Text style={styles.summaryNumber}>{counts.scheduled}</Text>
             <Text style={styles.summaryLabel}>Scheduled</Text>
           </View>
-          <View style={styles.summaryCard}>
-            <Text style={[styles.summaryNumber, { color: '#059669' }]}>{journeys.filter(j => j.status === 'active').length}</Text>
+          <View style={[styles.summaryCard, styles.summaryCardHighlight]}>
+            <Text style={styles.summaryEmoji}>🟢</Text>
+            <Text style={[styles.summaryNumber, { color: COLORS.emerald }]}>
+              {counts.active}
+            </Text>
             <Text style={styles.summaryLabel}>Active</Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>{journeys.filter(j => j.status === 'completed').length}</Text>
+            <Text style={styles.summaryEmoji}>🏁</Text>
+            <Text style={styles.summaryNumber}>{counts.completed}</Text>
             <Text style={styles.summaryLabel}>Completed</Text>
           </View>
         </View>
 
+        {/* Search & Activity Header */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Your travel activity</Text>
+          <Text style={styles.sectionTitle}>📋 Your travel activity</Text>
           <Pressable onPress={() => loadJourneys(true)} disabled={refreshing}>
-            {refreshing
-              ? <ActivityIndicator size="small" color={ORANGE} />
-              : <Ionicons name="refresh-outline" size={19} color={MUTED} />}
+            {refreshing ? (
+              <ActivityIndicator size="small" color={COLORS.orange} />
+            ) : (
+              <Text style={styles.refreshLabel}>↻ Sync</Text>
+            )}
           </Pressable>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-          {([
-            ['all', 'All journeys'],
-            ['upcoming', 'Upcoming'],
-            ['active', 'Active'],
-            ['completed', 'Completed'],
-          ] as [Filter, string][]).map(([value, label]) => (
-            <Pressable
-              key={value}
-              onPress={() => setFilter(value)}
-              style={[styles.filterChip, filter === value && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterText, filter === value && styles.filterTextActive]}>
-                {label}
-              </Text>
+        <View style={styles.searchBox}>
+          <Ionicons name="search-outline" size={17} color={COLORS.muted} />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search by trip name, origin, or destination..."
+            placeholderTextColor="#94A3B8"
+            style={styles.searchInput}
+          />
+          {!!search && (
+            <Pressable onPress={() => setSearch('')}>
+              <Ionicons name="close-circle" size={17} color={COLORS.muted} />
             </Pressable>
-          ))}
+          )}
+        </View>
+
+        {/* Filter Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+        >
+          {(
+            [
+              ['all', '🌍 All', counts.all],
+              ['upcoming', '⏳ Upcoming', counts.upcoming],
+              ['active', '🟢 Active', counts.active],
+              ['completed', '🏁 Completed', counts.completed],
+            ] as [Filter, string, number][]
+          ).map(([value, label, count]) => {
+            const isActive = filter === value;
+            return (
+              <Pressable
+                key={value}
+                onPress={() => setFilter(value)}
+                style={[styles.filterChip, isActive && styles.filterChipActive]}
+              >
+                <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+                  {label}
+                </Text>
+                <View style={[styles.countPill, isActive && styles.countPillActive]}>
+                  <Text style={[styles.countPillText, isActive && styles.countPillTextActive]}>
+                    {count}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
         </ScrollView>
 
+        {/* Journey Feed */}
         {loading ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator size="large" color={ORANGE} />
+            <ActivityIndicator size="large" color={COLORS.orange} />
             <Text style={styles.loadingText}>Loading your journeys...</Text>
           </View>
         ) : error ? (
           <View style={styles.emptyCard}>
-            <Ionicons name="cloud-offline-outline" size={30} color={MUTED} />
+            <Text style={{ fontSize: 32 }}>⚠️</Text>
             <Text style={styles.emptyTitle}>Unable to load journeys</Text>
             <Text style={styles.emptyText}>{error}</Text>
-            <Pressable style={styles.retryButton} onPress={() => loadJourneys()}>
-              <Text style={styles.retryText}>Try again</Text>
+            <Pressable style={styles.primaryButton} onPress={() => loadJourneys()}>
+              <Text style={styles.primaryButtonText}>↻ Try again</Text>
             </Pressable>
           </View>
         ) : filteredJourneys.length === 0 ? (
           <View style={styles.emptyCard}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="airplane-outline" size={27} color={ORANGE} />
+            <View style={styles.emptyEmojiBox}>
+              <Text style={{ fontSize: 28 }}>✈️</Text>
             </View>
-            <Text style={styles.emptyTitle}>No journeys here yet</Text>
+            <Text style={styles.emptyTitle}>
+              {search ? 'No matching trips found' : 'No journeys here yet'}
+            </Text>
             <Text style={styles.emptyText}>
-              {filter === 'all'
+              {search
+                ? 'Try adjusting your search keywords or clearing your filter.'
+                : filter === 'all'
                 ? 'Create your first journey to begin organising your travel.'
                 : 'Journeys matching this category will appear here.'}
             </Text>
-            {filter === 'all' && (
+            {filter === 'all' && !search && (
               <Pressable style={styles.primaryButton} onPress={openCreate}>
-                <Ionicons name="add" size={18} color="#FFFFFF" />
-                <Text style={styles.primaryButtonText}>Create a journey</Text>
+                <Text style={styles.primaryButtonText}>➕ Plan a journey</Text>
               </Pressable>
             )}
           </View>
         ) : (
-          <View style={styles.journeyList}>
-            {filteredJourneys.map(renderJourney)}
-          </View>
+          <View style={styles.journeyList}>{filteredJourneys.map(renderJourney)}</View>
         )}
 
+        {/* Privacy Footer */}
         <View style={styles.privacyNote}>
-          <Ionicons name="shield-checkmark-outline" size={19} color="#0B8B65" />
+          <Text style={{ fontSize: 18 }}>🛡️</Text>
           <Text style={styles.privacyText}>
-            Your journey information is protected by your account permissions. Location sharing is currently off unless you explicitly enable it in a supported feature.
+            Your journey data is protected by your account permissions. Live location sharing stays off until you explicitly enable it inside a journey.
           </Text>
         </View>
       </ScrollView>
 
+      {/* Create / Edit Modal */}
       <Modal
         visible={modal === 'form'}
         animationType="slide"
@@ -540,50 +658,60 @@ export default function JourneysScreen() {
         <SafeAreaView style={styles.modalScreen} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}>
             <Pressable onPress={() => setModal(null)} style={styles.modalClose}>
-              <Ionicons name="close" size={23} color={INK} />
+              <Ionicons name="close" size={22} color={COLORS.ink} />
             </Pressable>
-            <Text style={styles.modalTitle}>{editing ? 'Edit journey' : 'Plan a journey'}</Text>
+            <Text style={styles.modalTitle}>
+              {editing ? '✏️ Edit Journey' : '🧭 Plan a Journey'}
+            </Text>
             <View style={{ width: 40 }} />
           </View>
 
           <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.formSectionTitle}>Journey information</Text>
-            {renderInput('Journey name *', 'journey_name', 'e.g. Business trip to Abuja')}
-            {renderInput('Departure location *', 'origin_name', 'City or place of departure')}
-            {renderInput('Departure address', 'origin_address', 'Street address (optional)')}
-            {renderInput('Destination *', 'destination_name', 'City or destination')}
-            {renderInput('Destination address', 'destination_address', 'Street address (optional)')}
-
-            <Text style={styles.formSectionTitle}>Travel schedule</Text>
-            {renderInput('Departure date and time *', 'departure_at', 'YYYY-MM-DDTHH:mm')}
-            {renderInput('Expected arrival', 'expected_arrival_at', 'YYYY-MM-DDTHH:mm (optional)')}
-
-            <Text style={styles.fieldLabel}>Transport mode</Text>
-            <View style={styles.modeOptions}>
-              {([
-                ['road', 'car-outline', 'Road'],
-                ['air', 'airplane-outline', 'Air'],
-                ['rail', 'train-outline', 'Rail'],
-                ['sea', 'boat-outline', 'Sea'],
-                ['other', 'ellipsis-horizontal-circle-outline', 'Other'],
-              ] as const).map(([value, icon, label]) => (
-                <Pressable
-                  key={value}
-                  onPress={() => updateField('transport_mode', value)}
-                  style={[styles.modeOption, form.transport_mode === value && styles.modeOptionActive]}
-                >
-                  <Ionicons name={icon} size={18} color={form.transport_mode === value ? ORANGE : MUTED} />
-                  <Text style={[styles.modeLabel, form.transport_mode === value && styles.modeLabelActive]}>{label}</Text>
-                </Pressable>
-              ))}
+            <View style={styles.formCard}>
+              <Text style={styles.formSectionTitle}>📍 Route & Trip Info</Text>
+              {renderInput('Journey name *', 'journey_name', 'e.g. Business trip to Abuja')}
+              {renderInput('Departure location *', 'origin_name', 'City or terminal of departure')}
+              {renderInput('Departure address', 'origin_address', 'Street address (optional)')}
+              {renderInput('Destination *', 'destination_name', 'City or destination')}
+              {renderInput('Destination address', 'destination_address', 'Street address (optional)')}
             </View>
 
-            {renderInput('Additional notes', 'notes', 'Travel details or information for your reference', true)}
+            <View style={styles.formCard}>
+              <Text style={styles.formSectionTitle}>🕒 Travel Schedule & Mode</Text>
+              {renderInput('Departure date and time *', 'departure_at', 'YYYY-MM-DDTHH:mm')}
+              {renderInput('Expected arrival', 'expected_arrival_at', 'YYYY-MM-DDTHH:mm (optional)')}
+
+              <Text style={styles.fieldLabel}>Transport mode</Text>
+              <View style={styles.modeOptions}>
+                {MODES.map(({ value, emoji, label }) => {
+                  const active = form.transport_mode === value;
+                  return (
+                    <Pressable
+                      key={value}
+                      onPress={() => updateField('transport_mode', value)}
+                      style={[styles.modeOption, active && styles.modeOptionActive]}
+                    >
+                      <Text style={{ fontSize: 16 }}>{emoji}</Text>
+                      <Text style={[styles.modeLabel, active && styles.modeLabelActive]}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {renderInput(
+                '📝 Additional notes',
+                'notes',
+                'Flight number, hotel check-in, or emergency notes...',
+                true
+              )}
+            </View>
 
             <View style={styles.draftNotice}>
-              <Ionicons name="information-circle-outline" size={19} color="#8A5A13" />
+              <Text style={{ fontSize: 16 }}>💡</Text>
               <Text style={styles.draftNoticeText}>
-                New journeys are saved as drafts. You can schedule them after reviewing the details.
+                New journeys are saved as drafts first so you can review everything before scheduling.
               </Text>
             </View>
 
@@ -592,17 +720,19 @@ export default function JourneysScreen() {
               disabled={saving}
               style={[styles.primaryButton, styles.saveButton, saving && { opacity: 0.65 }]}
             >
-              {saving
-                ? <ActivityIndicator color="#FFFFFF" />
-                : <Ionicons name="checkmark-circle-outline" size={19} color="#FFFFFF" />}
-              <Text style={styles.primaryButtonText}>
-                {saving ? 'Saving...' : editing ? 'Save changes' : 'Save journey'}
-              </Text>
+              {saving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>
+                  {editing ? '✅ Save Changes' : '✨ Save Journey'}
+                </Text>
+              )}
             </Pressable>
           </ScrollView>
         </SafeAreaView>
       </Modal>
 
+      {/* Details Modal */}
       <Modal
         visible={modal === 'details' && !!selected}
         animationType="slide"
@@ -614,33 +744,45 @@ export default function JourneysScreen() {
             <>
               <View style={styles.modalHeader}>
                 <Pressable onPress={() => setModal(null)} style={styles.modalClose}>
-                  <Ionicons name="close" size={23} color={INK} />
+                  <Ionicons name="close" size={22} color={COLORS.ink} />
                 </Pressable>
-                <Text style={styles.modalTitle}>Journey details</Text>
+                <Text style={styles.modalTitle}>🧭 Journey Details</Text>
                 <View style={{ width: 40 }} />
               </View>
 
               <ScrollView contentContainerStyle={styles.detailContent}>
                 <View style={styles.detailHero}>
                   <View style={styles.detailHeroIcon}>
-                    <Ionicons name="navigate-outline" size={27} color={ORANGE} />
+                    <Text style={{ fontSize: 28 }}>{getModeEmoji(selected.transport_mode)}</Text>
                   </View>
                   <Text style={styles.detailName}>{selected.journey_name}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: `${statusColors[selected.status]}18` }]}>
-                    <Text style={[styles.statusText, { color: statusColors[selected.status] }]}>
-                      {statusLabel(selected.status)}
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: STATUS_META[selected.status].bg },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusText,
+                        { color: STATUS_META[selected.status].color },
+                      ]}
+                    >
+                      {STATUS_META[selected.status].emoji} {STATUS_META[selected.status].label}
                     </Text>
                   </View>
                 </View>
 
                 <View style={styles.detailCard}>
-                  <Text style={styles.detailSectionTitle}>Route</Text>
+                  <Text style={styles.detailSectionTitle}>📍 Route Overview</Text>
                   <View style={styles.detailRouteRow}>
                     <View style={styles.originDot} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.detailLabel}>FROM</Text>
                       <Text style={styles.detailValue}>{selected.origin_name}</Text>
-                      {!!selected.origin_address && <Text style={styles.detailSubValue}>{selected.origin_address}</Text>}
+                      {!!selected.origin_address && (
+                        <Text style={styles.detailSubValue}>{selected.origin_address}</Text>
+                      )}
                     </View>
                   </View>
                   <View style={styles.detailDivider} />
@@ -649,85 +791,115 @@ export default function JourneysScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.detailLabel}>TO</Text>
                       <Text style={styles.detailValue}>{selected.destination_name}</Text>
-                      {!!selected.destination_address && <Text style={styles.detailSubValue}>{selected.destination_address}</Text>}
+                      {!!selected.destination_address && (
+                        <Text style={styles.detailSubValue}>{selected.destination_address}</Text>
+                      )}
                     </View>
                   </View>
                 </View>
 
                 <View style={styles.detailCard}>
-                  <Text style={styles.detailSectionTitle}>Schedule and travel</Text>
+                  <Text style={styles.detailSectionTitle}>🕒 Schedule & Logistics</Text>
                   <DetailRow label="Departure" value={formatDate(selected.departure_at)} />
-                  <DetailRow label="Expected arrival" value={formatDate(selected.expected_arrival_at)} />
-                  <DetailRow label="Transport" value={selected.transport_mode.toUpperCase()} />
+                  <DetailRow
+                    label="Expected arrival"
+                    value={formatDate(selected.expected_arrival_at)}
+                  />
+                  <DetailRow
+                    label="Transport"
+                    value={`${getModeEmoji(selected.transport_mode)} ${selected.transport_mode.toUpperCase()}`}
+                  />
                   <DetailRow label="Timezone" value={selected.departure_timezone} />
-                  {!!selected.started_at && <DetailRow label="Started" value={formatDate(selected.started_at)} />}
-                  {!!selected.completed_at && <DetailRow label="Completed" value={formatDate(selected.completed_at)} />}
+                  {!!selected.started_at && (
+                    <DetailRow label="Started" value={formatDate(selected.started_at)} />
+                  )}
+                  {!!selected.completed_at && (
+                    <DetailRow label="Completed" value={formatDate(selected.completed_at)} />
+                  )}
                 </View>
 
                 {!!selected.notes && (
                   <View style={styles.detailCard}>
-                    <Text style={styles.detailSectionTitle}>Notes</Text>
+                    <Text style={styles.detailSectionTitle}>📝 Traveller Notes</Text>
                     <Text style={styles.notesText}>{selected.notes}</Text>
                   </View>
                 )}
 
-                <JourneyGpsControls
-                  journey={selected}
-                  onUpdated={(enabled) => {
-                    const updated = {
-                      ...selected,
-                      location_sharing_enabled: enabled,
-                    };
-
-                    setSelected(updated);
-                    setJourneys((current) =>
-                      current.map((item) =>
-                        item.id === updated.id ? updated : item
-                      )
-                    );
-                  }}
-                />
+                <View style={{ marginTop: 12 }}>
+                  <JourneyGpsControls
+                    journey={selected}
+                    onUpdated={(enabled) => {
+                      const updated = {
+                        ...selected,
+                        location_sharing_enabled: enabled,
+                      };
+                      setSelected(updated);
+                      setJourneys((current) =>
+                        current.map((item) => (item.id === updated.id ? updated : item))
+                      );
+                    }}
+                  />
+                </View>
 
                 {selected.status === 'draft' && (
                   <>
-                    <Pressable style={styles.primaryButton} onPress={() => changeStatus(selected, 'scheduled')}>
-                      <Ionicons name="calendar-outline" size={18} color="#FFFFFF" />
-                      <Text style={styles.primaryButtonText}>Schedule journey</Text>
+                    <Pressable
+                      style={styles.primaryButton}
+                      onPress={() => changeStatus(selected, 'scheduled')}
+                    >
+                      <Text style={styles.primaryButtonText}>📅 Schedule Journey</Text>
                     </Pressable>
-                    <Pressable style={styles.secondaryAction} onPress={() => openEdit(selected)}>
-                      <Ionicons name="create-outline" size={18} color={NAVY} />
-                      <Text style={styles.secondaryActionText}>Edit journey</Text>
+                    <Pressable
+                      style={styles.secondaryAction}
+                      onPress={() => openEdit(selected)}
+                    >
+                      <Text style={styles.secondaryActionText}>✏️ Edit Details</Text>
                     </Pressable>
-                    <Pressable style={styles.cancelAction} onPress={() => changeStatus(selected, 'cancelled')}>
-                      <Text style={styles.cancelActionText}>Cancel journey</Text>
+                    <Pressable
+                      style={styles.cancelAction}
+                      onPress={() => changeStatus(selected, 'cancelled')}
+                    >
+                      <Text style={styles.cancelActionText}>🚫 Cancel Journey</Text>
                     </Pressable>
                   </>
                 )}
 
                 {selected.status === 'scheduled' && (
                   <>
-                    <Pressable style={styles.primaryButton} onPress={() => changeStatus(selected, 'active')}>
-                      <Ionicons name="play-circle-outline" size={18} color="#FFFFFF" />
-                      <Text style={styles.primaryButtonText}>Start journey</Text>
+                    <Pressable
+                      style={[styles.primaryButton, { backgroundColor: COLORS.emerald }]}
+                      onPress={() => changeStatus(selected, 'active')}
+                    >
+                      <Text style={styles.primaryButtonText}>🟢 Start Journey Now</Text>
                     </Pressable>
-                    <Pressable style={styles.secondaryAction} onPress={() => openEdit(selected)}>
-                      <Ionicons name="create-outline" size={18} color={NAVY} />
-                      <Text style={styles.secondaryActionText}>Edit journey</Text>
+                    <Pressable
+                      style={styles.secondaryAction}
+                      onPress={() => openEdit(selected)}
+                    >
+                      <Text style={styles.secondaryActionText}>✏️ Edit Details</Text>
                     </Pressable>
-                    <Pressable style={styles.cancelAction} onPress={() => changeStatus(selected, 'cancelled')}>
-                      <Text style={styles.cancelActionText}>Cancel journey</Text>
+                    <Pressable
+                      style={styles.cancelAction}
+                      onPress={() => changeStatus(selected, 'cancelled')}
+                    >
+                      <Text style={styles.cancelActionText}>🚫 Cancel Journey</Text>
                     </Pressable>
                   </>
                 )}
 
                 {selected.status === 'active' && (
                   <>
-                    <Pressable style={styles.primaryButton} onPress={() => changeStatus(selected, 'completed')}>
-                      <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
-                      <Text style={styles.primaryButtonText}>Complete journey</Text>
+                    <Pressable
+                      style={styles.primaryButton}
+                      onPress={() => changeStatus(selected, 'completed')}
+                    >
+                      <Text style={styles.primaryButtonText}>🏁 Complete Journey</Text>
                     </Pressable>
-                    <Pressable style={styles.cancelAction} onPress={() => changeStatus(selected, 'cancelled')}>
-                      <Text style={styles.cancelActionText}>Cancel journey</Text>
+                    <Pressable
+                      style={styles.cancelAction}
+                      onPress={() => changeStatus(selected, 'cancelled')}
+                    >
+                      <Text style={styles.cancelActionText}>🚫 Cancel Journey</Text>
                     </Pressable>
                   </>
                 )}
@@ -750,99 +922,355 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: PAGE },
-  content: { paddingHorizontal: 19, paddingBottom: 36 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, gap: 12 },
-  backButton: { width: 40, height: 40, borderRadius: 13, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BORDER },
+  screen: { flex: 1, backgroundColor: COLORS.page },
+  content: { paddingHorizontal: 18, paddingBottom: 40 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 12 },
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: COLORS.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
   headerText: { flex: 1 },
-  eyebrow: { color: ORANGE, fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
-  heading: { color: INK, fontSize: 21, fontWeight: '800', marginTop: 2 },
-  addButton: { width: 42, height: 42, borderRadius: 14, backgroundColor: NAVY, alignItems: 'center', justifyContent: 'center' },
-  introCard: { backgroundColor: NAVY, borderRadius: 18, padding: 17, flexDirection: 'row', alignItems: 'center', gap: 13, marginTop: 8 },
-  introIcon: { width: 47, height: 47, borderRadius: 14, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  introText: { flex: 1 },
-  introTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  introDescription: { color: '#D6DFEB', fontSize: 11, lineHeight: 17, marginTop: 4 },
+  eyebrow: { color: COLORS.orange, fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  heading: { color: COLORS.ink, fontSize: 22, fontWeight: '800', marginTop: 2 },
+  addButton: {
+    height: 42,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: COLORS.navy,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  addButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  heroCard: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 20,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 6,
+  },
+  heroEmojiBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroText: { flex: 1 },
+  heroTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  heroDescription: { color: '#CBD5E1', fontSize: 12, lineHeight: 18, marginTop: 4 },
   summaryRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  summaryCard: { flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BORDER, borderRadius: 14, padding: 13 },
-  summaryNumber: { color: NAVY, fontSize: 21, fontWeight: '800' },
-  summaryLabel: { color: MUTED, fontSize: 10, marginTop: 3, fontWeight: '600' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 25, marginBottom: 12 },
-  sectionTitle: { color: INK, fontSize: 15, fontWeight: '800' },
-  filterScroll: { marginBottom: 15, flexGrow: 0 },
-  filterChip: { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BORDER, marginRight: 8 },
-  filterChipActive: { backgroundColor: NAVY, borderColor: NAVY },
-  filterText: { color: MUTED, fontSize: 11, fontWeight: '600' },
+  summaryCard: {
+    flex: 1,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    padding: 13,
+  },
+  summaryCardHighlight: { borderColor: '#A7F3D0', backgroundColor: '#F8FAFC' },
+  summaryEmoji: { fontSize: 15, marginBottom: 4 },
+  summaryNumber: { color: COLORS.navy, fontSize: 22, fontWeight: '800' },
+  summaryLabel: { color: COLORS.muted, fontSize: 11, marginTop: 2, fontWeight: '600' },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 22,
+    marginBottom: 10,
+  },
+  sectionTitle: { color: COLORS.ink, fontSize: 16, fontWeight: '800' },
+  refreshLabel: { color: COLORS.orange, fontSize: 12, fontWeight: '800' },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    paddingHorizontal: 13,
+    height: 44,
+    gap: 8,
+    marginBottom: 12,
+  },
+  searchInput: { flex: 1, color: COLORS.ink, fontSize: 13 },
+  filterScroll: { marginBottom: 16, flexGrow: 0 },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginRight: 8,
+  },
+  filterChipActive: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
+  filterText: { color: COLORS.muted, fontSize: 12, fontWeight: '700' },
   filterTextActive: { color: '#FFFFFF' },
-  journeyList: { gap: 11 },
-  journeyCard: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BORDER, borderRadius: 17, padding: 15 },
-  pressed: { opacity: 0.85 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  transportIcon: { width: 39, height: 39, borderRadius: 12, backgroundColor: '#FFF3E7', alignItems: 'center', justifyContent: 'center' },
+  countPill: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  countPillActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  countPillText: { color: COLORS.muted, fontSize: 10, fontWeight: '800' },
+  countPillTextActive: { color: '#FFFFFF' },
+  journeyList: { gap: 12 },
+  journeyCard: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    padding: 16,
+  },
+  pressed: { opacity: 0.9, transform: [{ scale: 0.995 }] },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 11 },
+  transportEmojiBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: COLORS.orangeSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transportEmoji: { fontSize: 20 },
   cardTitleArea: { flex: 1 },
-  journeyName: { color: INK, fontSize: 13, fontWeight: '800' },
-  cardDate: { color: MUTED, fontSize: 10, marginTop: 4 },
-  statusBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 20 },
-  statusText: { fontSize: 9, fontWeight: '800' },
-  route: { flexDirection: 'row', marginTop: 17, marginLeft: 6 },
-  routeRail: { width: 16, alignItems: 'center', paddingVertical: 3 },
-  originDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 2, borderColor: '#0B9B70', backgroundColor: '#FFFFFF' },
-  routeLine: { width: 1, height: 21, backgroundColor: '#C8D0DA', marginVertical: 2 },
-  destinationDot: { width: 9, height: 9, borderRadius: 2, backgroundColor: ORANGE },
-  routeNames: { flex: 1, justifyContent: 'space-between', minHeight: 47, paddingLeft: 9 },
-  routeName: { color: '#344456', fontSize: 11, fontWeight: '600' },
-  cardBottom: { borderTopWidth: 1, borderTopColor: '#EEF1F5', marginTop: 14, paddingTop: 11, flexDirection: 'row', justifyContent: 'space-between' },
-  cardMode: { color: MUTED, fontSize: 9, fontWeight: '700', letterSpacing: 0.7 },
-  viewDetails: { color: ORANGE, fontSize: 10, fontWeight: '800' },
+  journeyName: { color: COLORS.ink, fontSize: 14, fontWeight: '800' },
+  cardDate: { color: COLORS.muted, fontSize: 11, marginTop: 4, fontWeight: '500' },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  statusText: { fontSize: 10, fontWeight: '800' },
+  routeBox: {
+    flexDirection: 'row',
+    marginTop: 15,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+  },
+  routeRail: { width: 16, alignItems: 'center', paddingVertical: 5 },
+  originDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2.5,
+    borderColor: COLORS.emerald,
+    backgroundColor: '#FFFFFF',
+  },
+  routeLine: { width: 1.5, height: 28, backgroundColor: '#CBD5E1', marginVertical: 3 },
+  destinationDot: { width: 10, height: 10, borderRadius: 3, backgroundColor: COLORS.orange },
+  routeNames: { flex: 1, paddingLeft: 10 },
+  routeMicroLabel: { color: '#94A3B8', fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
+  routeName: { color: '#1E293B', fontSize: 12, fontWeight: '700', marginTop: 1 },
+  cardBottom: {
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    marginTop: 13,
+    paddingTop: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardMode: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
+  gpsPill: {
+    backgroundColor: COLORS.emeraldSoft,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  gpsPillText: { color: COLORS.emerald, fontSize: 10, fontWeight: '800' },
+  viewDetails: { color: COLORS.orange, fontSize: 12, fontWeight: '800' },
   loadingBox: { paddingVertical: 50, alignItems: 'center' },
-  loadingText: { color: MUTED, fontSize: 12, marginTop: 12 },
-  emptyCard: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BORDER, borderRadius: 17, alignItems: 'center', padding: 25, marginTop: 3 },
-  emptyIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: '#FFF3E7', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  emptyTitle: { color: INK, fontSize: 14, fontWeight: '800', marginTop: 8 },
-  emptyText: { color: MUTED, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 6 },
-  primaryButton: { minHeight: 47, borderRadius: 13, backgroundColor: NAVY, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, paddingHorizontal: 16, marginTop: 16 },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
-  retryButton: { marginTop: 13, padding: 10 },
-  retryText: { color: ORANGE, fontSize: 12, fontWeight: '800' },
-  privacyNote: { backgroundColor: '#EAF6F1', borderRadius: 13, padding: 13, flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginTop: 22 },
-  privacyText: { color: '#41685A', flex: 1, fontSize: 10, lineHeight: 16 },
-  modalScreen: { flex: 1, backgroundColor: PAGE },
-  modalHeader: { height: 58, paddingHorizontal: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: BORDER, backgroundColor: '#FFFFFF' },
-  modalClose: { width: 40, height: 40, borderRadius: 12, backgroundColor: PAGE, alignItems: 'center', justifyContent: 'center' },
-  modalTitle: { color: INK, fontSize: 15, fontWeight: '800' },
-  formContent: { padding: 19, paddingBottom: 40 },
-  formSectionTitle: { color: NAVY, fontSize: 13, fontWeight: '800', marginTop: 12, marginBottom: 13 },
+  loadingText: { color: COLORS.muted, fontSize: 12, marginTop: 12 },
+  emptyCard: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    alignItems: 'center',
+    padding: 28,
+    marginTop: 4,
+  },
+  emptyEmojiBox: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: COLORS.orangeSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '800', marginTop: 6 },
+  emptyText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: COLORS.navy,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    marginTop: 16,
+  },
+  primaryButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  privacyNote: {
+    backgroundColor: COLORS.emeraldSoft,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 22,
+  },
+  privacyText: { color: '#065F46', flex: 1, fontSize: 11, lineHeight: 17, fontWeight: '500' },
+  modalScreen: { flex: 1, backgroundColor: COLORS.page },
+  modalHeader: {
+    height: 60,
+    paddingHorizontal: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.card,
+  },
+  modalClose: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.page,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: { color: COLORS.ink, fontSize: 16, fontWeight: '800' },
+  formContent: { padding: 18, paddingBottom: 42 },
+  formCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 16,
+    marginBottom: 14,
+  },
+  formSectionTitle: { color: COLORS.navy, fontSize: 14, fontWeight: '800', marginBottom: 14 },
   field: { marginBottom: 14 },
-  fieldLabel: { color: '#344456', fontSize: 11, fontWeight: '700', marginBottom: 7 },
-  input: { minHeight: 46, borderWidth: 1, borderColor: BORDER, backgroundColor: '#FFFFFF', borderRadius: 11, paddingHorizontal: 13, color: INK, fontSize: 12 },
-  multilineInput: { minHeight: 90, paddingTop: 12 },
-  modeOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 17, marginTop: 2 },
-  modeOption: { borderWidth: 1, borderColor: BORDER, backgroundColor: '#FFFFFF', borderRadius: 11, paddingHorizontal: 11, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  modeOptionActive: { borderColor: ORANGE, backgroundColor: '#FFF5EB' },
-  modeLabel: { color: MUTED, fontSize: 10, fontWeight: '600' },
-  modeLabelActive: { color: '#A94E0B' },
-  draftNotice: { backgroundColor: '#FFF4DF', borderRadius: 11, padding: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 5 },
-  draftNoticeText: { color: '#79531C', flex: 1, fontSize: 10, lineHeight: 16 },
-  saveButton: { marginTop: 19, marginBottom: 15 },
-  detailContent: { padding: 18, paddingBottom: 40 },
-  detailHero: { alignItems: 'center', paddingVertical: 15 },
-  detailHeroIcon: { width: 58, height: 58, borderRadius: 19, backgroundColor: '#FFF0E1', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  detailName: { color: INK, fontSize: 18, fontWeight: '800', marginBottom: 10, textAlign: 'center' },
-  detailCard: { backgroundColor: '#FFFFFF', borderRadius: 15, borderWidth: 1, borderColor: BORDER, padding: 15, marginTop: 12 },
-  detailSectionTitle: { color: NAVY, fontSize: 12, fontWeight: '800', marginBottom: 14 },
-  detailRouteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 5 },
-  detailLabel: { color: MUTED, fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
-  detailValue: { color: INK, fontSize: 13, fontWeight: '700', marginTop: 4 },
-  detailSubValue: { color: MUTED, fontSize: 10, marginTop: 3 },
-  detailDivider: { height: 1, backgroundColor: '#EDF0F4', marginVertical: 9, marginLeft: 20 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#F0F2F5' },
-  detailRowLabel: { color: MUTED, fontSize: 10 },
-  detailRowValue: { color: INK, fontSize: 10, fontWeight: '700', textAlign: 'right', flex: 1 },
-  notesText: { color: '#445366', fontSize: 11, lineHeight: 18 },
-  locationNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, backgroundColor: '#EDF1F5', padding: 12, borderRadius: 12, marginTop: 13 },
-  locationNoticeText: { flex: 1, color: MUTED, fontSize: 10, lineHeight: 16 },
-  secondaryAction: { minHeight: 45, borderWidth: 1, borderColor: BORDER, borderRadius: 12, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 },
-  secondaryActionText: { color: NAVY, fontSize: 12, fontWeight: '700' },
-  cancelAction: { alignItems: 'center', padding: 14, marginTop: 5 },
-  cancelActionText: { color: '#C33B3B', fontSize: 11, fontWeight: '700' },
+  fieldLabel: { color: '#334155', fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  input: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingHorizontal: 13,
+    color: COLORS.ink,
+    fontSize: 13,
+  },
+  multilineInput: { minHeight: 92, paddingTop: 12 },
+  modeOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16, marginTop: 2 },
+  modeOption: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  modeOptionActive: { borderColor: COLORS.orange, backgroundColor: COLORS.orangeSoft },
+  modeLabel: { color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  modeLabelActive: { color: '#9A3412' },
+  draftNotice: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  draftNoticeText: { color: '#92400E', flex: 1, fontSize: 11, lineHeight: 16 },
+  saveButton: { marginTop: 16, marginBottom: 15 },
+  detailContent: { padding: 18, paddingBottom: 42 },
+  detailHero: { alignItems: 'center', paddingVertical: 14 },
+  detailHeroIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: COLORS.orangeSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  detailName: {
+    color: COLORS.ink,
+    fontSize: 19,
+    fontWeight: '800',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  detailCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 16,
+    marginTop: 12,
+  },
+  detailSectionTitle: { color: COLORS.navy, fontSize: 13, fontWeight: '800', marginBottom: 14 },
+  detailRouteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 4 },
+  detailLabel: { color: COLORS.muted, fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
+  detailValue: { color: COLORS.ink, fontSize: 14, fontWeight: '700', marginTop: 3 },
+  detailSubValue: { color: COLORS.muted, fontSize: 11, marginTop: 2 },
+  detailDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 10, marginLeft: 22 },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  detailRowLabel: { color: COLORS.muted, fontSize: 12 },
+  detailRowValue: { color: COLORS.ink, fontSize: 12, fontWeight: '700', textAlign: 'right', flex: 1 },
+  notesText: { color: '#334155', fontSize: 13, lineHeight: 20 },
+  secondaryAction: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    backgroundColor: COLORS.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+  },
+  secondaryActionText: { color: COLORS.navy, fontSize: 13, fontWeight: '700' },
+  cancelAction: { alignItems: 'center', padding: 14, marginTop: 6 },
+  cancelActionText: { color: '#DC2626', fontSize: 12, fontWeight: '700' },
 });

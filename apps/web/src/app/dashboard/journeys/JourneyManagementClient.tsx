@@ -57,19 +57,42 @@ const EMPTY_FORM: JourneyForm = {
 };
 
 const MODES = [
-  { value: "road", label: "Road", icon: "🚘" },
-  { value: "air", label: "Air", icon: "✈️" },
-  { value: "rail", label: "Rail", icon: "🚆" },
-  { value: "sea", label: "Sea", icon: "🚢" },
-  { value: "other", label: "Other", icon: "➕" },
+  { value: "road", label: "Road", emoji: "🚘" },
+  { value: "air", label: "Air", emoji: "✈️" },
+  { value: "rail", label: "Rail", emoji: "🚆" },
+  { value: "sea", label: "Sea", emoji: "🚢" },
+  { value: "other", label: "Other", emoji: "🧭" },
 ];
 
-const STATUS_COLORS: Record<JourneyStatus, string> = {
-  draft: "bg-slate-100 text-slate-600",
-  scheduled: "bg-blue-50 text-blue-700",
-  active: "bg-emerald-50 text-emerald-700",
-  completed: "bg-slate-100 text-slate-700",
-  cancelled: "bg-red-50 text-red-700",
+const STATUS_META: Record<
+  JourneyStatus,
+  { label: string; emoji: string; badgeClass: string }
+> = {
+  draft: {
+    label: "Draft",
+    emoji: "📝",
+    badgeClass: "bg-slate-100 text-slate-700 border-slate-200",
+  },
+  scheduled: {
+    label: "Scheduled",
+    emoji: "📅",
+    badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+  active: {
+    label: "Active Now",
+    emoji: "🟢",
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
+  completed: {
+    label: "Completed",
+    emoji: "🏁",
+    badgeClass: "bg-slate-100 text-slate-700 border-slate-200",
+  },
+  cancelled: {
+    label: "Cancelled",
+    emoji: "🚫",
+    badgeClass: "bg-red-50 text-red-700 border-red-200",
+  },
 };
 
 function localDateTimeValue(date: Date) {
@@ -91,12 +114,12 @@ function formatDate(value: string | null) {
   });
 }
 
-function statusLabel(status: JourneyStatus) {
-  return status.charAt(0).toUpperCase() + status.slice(1);
+function getModeEmoji(mode: string) {
+  return MODES.find((item) => item.value === mode)?.emoji ?? "🚘";
 }
 
 function inputClass() {
-  return "mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-[#172536] outline-none transition focus:border-[#F28C28] focus:ring-2 focus:ring-orange-100";
+  return "mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-sm text-[#172536] outline-none transition focus:border-[#F28C28] focus:bg-white focus:ring-2 focus:ring-orange-100";
 }
 
 export default function JourneyManagementClient({
@@ -112,60 +135,86 @@ export default function JourneyManagementClient({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [search, setSearch] = useState("");
 
   const [modal, setModal] = useState<"form" | "details" | null>(null);
   const [selected, setSelected] = useState<Journey | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<JourneyForm>(EMPTY_FORM);
 
-  const loadJourneys = useCallback(async (quiet = false) => {
-    if (quiet) setRefreshing(true);
-    else setLoading(true);
+  const loadJourneys = useCallback(
+    async (quiet = false) => {
+      if (quiet) setRefreshing(true);
+      else setLoading(true);
 
-    setError("");
+      setError("");
 
-    try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
 
-      if (sessionError || !session) {
-        window.location.href = "/login";
-        return;
+        if (sessionError || !session) {
+          window.location.href = "/login";
+          return;
+        }
+
+        const { data, error: queryError } = await supabase
+          .from("journeys")
+          .select("*")
+          .eq("traveller_id", travellerId)
+          .order("departure_at", { ascending: true });
+
+        if (queryError) throw queryError;
+
+        setJourneys((data ?? []) as Journey[]);
+      } catch (err) {
+        console.error("Journey loading failed:", err);
+        setError("We could not load your journeys. Please try again.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-
-      const { data, error: queryError } = await supabase
-        .from("journeys")
-        .select("*")
-        .eq("traveller_id", travellerId)
-        .order("departure_at", { ascending: true });
-
-      if (queryError) throw queryError;
-
-      setJourneys((data ?? []) as Journey[]);
-    } catch (err) {
-      console.error("Journey loading failed:", err);
-      setError("We could not load your journeys. Please try again.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [supabase, travellerId]);
+    },
+    [supabase, travellerId]
+  );
 
   useEffect(() => {
     void loadJourneys();
   }, [loadJourneys]);
 
+  const counts = useMemo(
+    () => ({
+      all: journeys.length,
+      upcoming: journeys.filter((j) => j.status === "draft" || j.status === "scheduled").length,
+      scheduled: journeys.filter((j) => j.status === "scheduled").length,
+      active: journeys.filter((j) => j.status === "active").length,
+      completed: journeys.filter((j) => j.status === "completed").length,
+    }),
+    [journeys]
+  );
+
   const filteredJourneys = useMemo(() => {
+    const q = search.trim().toLowerCase();
     return journeys.filter((journey) => {
-      if (filter === "all") return true;
-      if (filter === "upcoming") {
-        return journey.status === "draft" || journey.status === "scheduled";
-      }
-      return journey.status === filter;
+      const matchesTab =
+        filter === "all"
+          ? true
+          : filter === "upcoming"
+          ? journey.status === "draft" || journey.status === "scheduled"
+          : journey.status === filter;
+
+      if (!matchesTab) return false;
+      if (!q) return true;
+
+      return (
+        journey.journey_name.toLowerCase().includes(q) ||
+        journey.origin_name.toLowerCase().includes(q) ||
+        journey.destination_name.toLowerCase().includes(q)
+      );
     });
-  }, [journeys, filter]);
+  }, [journeys, filter, search]);
 
   function openCreate() {
     setSelected(null);
@@ -251,8 +300,7 @@ export default function JourneyManagementClient({
         return;
       }
 
-      const timezone =
-        Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
       const payload = {
         journey_name: form.journey_name.trim(),
@@ -289,8 +337,8 @@ export default function JourneyManagementClient({
       await loadJourneys(true);
       setNotice(
         editing
-          ? "Your journey details have been updated."
-          : "Your journey has been saved as a draft. You can schedule it from its details."
+          ? "✅ Your journey details have been updated."
+          : "✨ Your journey has been saved as a draft. You can schedule it from its details."
       );
     } catch (err) {
       console.error("Journey save failed:", err);
@@ -306,10 +354,10 @@ export default function JourneyManagementClient({
 
   async function changeStatus(journey: Journey, status: JourneyStatus) {
     const messages: Record<string, string> = {
-      scheduled: "Schedule this journey?",
-      active: "Start this journey now?",
-      completed: "Mark this journey as completed?",
-      cancelled: "Cancel this journey?",
+      scheduled: "📅 Schedule this journey?",
+      active: "🟢 Start this journey now?",
+      completed: "🏁 Mark this journey as completed?",
+      cancelled: "🚫 Cancel this journey?",
     };
 
     if (!window.confirm(messages[status] || "Update this journey?")) return;
@@ -339,7 +387,7 @@ export default function JourneyManagementClient({
       setModal(null);
       setSelected(null);
       await loadJourneys(true);
-      setNotice(`Journey is now ${statusLabel(status).toLowerCase()}.`);
+      setNotice(`✅ Journey is now ${STATUS_META[status].label.toLowerCase()}.`);
     } catch (err) {
       console.error("Journey status update failed:", err);
       setNotice(
@@ -362,9 +410,7 @@ export default function JourneyManagementClient({
 
     setSelected(updated);
     setJourneys((current) =>
-      current.map((journey) =>
-        journey.id === updated.id ? updated : journey
-      )
+      current.map((journey) => (journey.id === updated.id ? updated : journey))
     );
   }
 
@@ -375,143 +421,204 @@ export default function JourneyManagementClient({
     setNotice("");
   }
 
-  const summary = {
-    scheduled: journeys.filter((journey) => journey.status === "scheduled").length,
-    active: journeys.filter((journey) => journey.status === "active").length,
-    completed: journeys.filter((journey) => journey.status === "completed").length,
-  };
-
   return (
-    <section aria-label="My journeys" data-traveller-id={travellerId} className="space-y-5">
-      <header className="flex items-center gap-3 py-2">
+    <section
+      aria-label="My journeys"
+      data-traveller-id={travellerId}
+      className="mx-auto max-w-5xl space-y-6 rounded-3xl bg-[#F4F6F9] p-4 sm:p-7"
+    >
+      {/* Top Header */}
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-extrabold tracking-[0.16em] text-[#F28C28]">
-            TRAVELLER SERVICES
+          <p className="text-[11px] font-extrabold tracking-[0.16em] text-[#F28C28]">
+            🧭 TRAVELLER SERVICES {travellerName ? `• ${travellerName.toUpperCase()}` : ""}
           </p>
-          <h2 className="mt-1 text-2xl font-extrabold text-[#172536]">
-            My journeys
+          <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-[#172536] sm:text-3xl">
+            My Journeys
           </h2>
         </div>
         <button
           type="button"
           onClick={openCreate}
           aria-label="Plan a journey"
-          className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#071D49] text-2xl font-medium text-white transition hover:bg-blue-900"
+          className="inline-flex items-center gap-2 rounded-2xl bg-[#071D49] px-5 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#102E6B] active:scale-[0.99]"
         >
-          +
+          <span>➕</span>
+          <span>Plan a Journey</span>
         </button>
       </header>
 
-      <div className="flex items-center gap-4 rounded-2xl bg-[#071D49] p-5 text-white sm:p-6">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-2xl">
-          <span className="text-[#F28C28]">➤</span>
+      {/* Hero Banner */}
+      <div className="flex items-center gap-4 rounded-2xl bg-[#071D49] p-5 text-white shadow-sm sm:p-6">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-3xl">
+          🗺️
         </div>
         <div>
-          <h3 className="text-base font-bold">Travel with a plan</h3>
-          <p className="mt-1 text-sm leading-6 text-blue-100">
-            Organise your trips and keep your journey information in one place.
+          <h3 className="text-base font-extrabold sm:text-lg">
+            Travel with a clear plan ✨
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed text-slate-300 sm:text-sm">
+            Organise routes, track departure schedules, and manage live GPS sharing in one secure hub.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      {/* KPI Summary Cards */}
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
         {[
-          { label: "Scheduled", value: summary.scheduled, color: "text-[#071D49]" },
-          { label: "Active", value: summary.active, color: "text-emerald-600" },
-          { label: "Completed", value: summary.completed, color: "text-[#071D49]" },
+          { label: "Scheduled", emoji: "📅", value: counts.scheduled, color: "text-[#071D49]", highlight: false },
+          { label: "Active", emoji: "🟢", value: counts.active, color: "text-emerald-600", highlight: true },
+          { label: "Completed", emoji: "🏁", value: counts.completed, color: "text-[#071D49]", highlight: false },
         ].map((item) => (
-          <div key={item.label} className="rounded-xl border border-[#E2E7EE] bg-white p-3.5 sm:p-4">
-            <p className={`text-2xl font-extrabold ${item.color}`}>{item.value}</p>
-            <p className="mt-1 text-xs font-semibold text-[#687789]">{item.label}</p>
+          <div
+            key={item.label}
+            className={`rounded-2xl border p-4 transition ${
+              item.highlight
+                ? "border-emerald-200 bg-emerald-50/40"
+                : "border-slate-200 bg-white"
+            }`}
+          >
+            <div className="text-lg">{item.emoji}</div>
+            <p className={`mt-1 text-2xl font-extrabold sm:text-3xl ${item.color}`}>
+              {item.value}
+            </p>
+            <p className="mt-0.5 text-xs font-semibold text-slate-500">{item.label}</p>
           </div>
         ))}
       </div>
 
-      <div className="flex items-center justify-between gap-3 pt-2">
-        <h3 className="text-base font-extrabold text-[#172536]">Your travel activity</h3>
-        <button
-          type="button"
-          onClick={() => void loadJourneys(true)}
-          disabled={refreshing}
-          className="rounded-lg px-3 py-2 text-sm font-bold text-[#687789] transition hover:bg-white disabled:opacity-50"
-        >
-          {refreshing ? "Refreshing…" : "↻ Refresh"}
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {([
-          ["all", "All journeys"],
-          ["upcoming", "Upcoming"],
-          ["active", "Active"],
-          ["completed", "Completed"],
-        ] as [Filter, string][]).map(([value, label]) => (
+      {/* Activity Controls: Search & Filter Tabs */}
+      <div className="space-y-4 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-base font-extrabold text-[#172536] sm:text-lg">
+            📋 Your travel activity
+          </h3>
           <button
-            key={value}
             type="button"
-            onClick={() => setFilter(value)}
-            aria-pressed={filter === value}
-            className={`rounded-full border px-4 py-2 text-xs font-bold transition ${
-              filter === value
-                ? "border-[#071D49] bg-[#071D49] text-white"
-                : "border-[#E2E7EE] bg-white text-[#687789] hover:border-[#F28C28]"
-            }`}
+            onClick={() => void loadJourneys(true)}
+            disabled={refreshing}
+            className="rounded-xl bg-white px-3.5 py-2 text-xs font-extrabold text-[#F28C28] shadow-xs ring-1 ring-slate-200 transition hover:bg-orange-50 disabled:opacity-50"
           >
-            {label}
+            {refreshing ? "Syncing…" : "↻ Sync"}
           </button>
-        ))}
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* Filter Chips */}
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["all", "🌍 All", counts.all],
+                ["upcoming", "⏳ Upcoming", counts.upcoming],
+                ["active", "🟢 Active", counts.active],
+                ["completed", "🏁 Completed", counts.completed],
+              ] as [Filter, string, number][]
+            ).map(([value, label, count]) => {
+              const active = filter === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setFilter(value)}
+                  aria-pressed={active}
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold transition ${
+                    active
+                      ? "border-[#071D49] bg-[#071D49] text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-[#F28C28]"
+                  }`}
+                >
+                  <span>{label}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                      active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Search Input */}
+          <div className="relative w-full sm:w-72">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="🔍 Search trips or cities..."
+              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-[#172536] outline-none transition focus:border-[#F28C28] focus:ring-2 focus:ring-orange-100"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {notice && (
-        <div role="status" className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        <div
+          role="status"
+          className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-900"
+        >
           {notice}
         </div>
       )}
 
+      {/* Main Content Feed */}
       {loading ? (
-        <div className="rounded-2xl border border-[#E2E7EE] bg-white py-14 text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-orange-100 border-t-[#F28C28]" />
-          <p className="mt-3 text-sm text-[#687789]">Loading your journeys...</p>
+        <div className="rounded-2xl border border-slate-200 bg-white py-16 text-center">
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-orange-100 border-t-[#F28C28]" />
+          <p className="mt-3 text-sm font-medium text-slate-500">Loading your journeys...</p>
         </div>
       ) : error ? (
-        <div className="rounded-2xl border border-[#E2E7EE] bg-white p-7 text-center">
-          <p className="font-bold text-[#172536]">Unable to load journeys</p>
-          <p className="mt-2 text-sm text-[#687789]">{error}</p>
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+          <div className="text-3xl">⚠️</div>
+          <p className="mt-2 font-extrabold text-[#172536]">Unable to load journeys</p>
+          <p className="mt-1 text-sm text-slate-500">{error}</p>
           <button
             type="button"
             onClick={() => void loadJourneys()}
-            className="mt-4 rounded-xl bg-[#071D49] px-5 py-2.5 text-sm font-bold text-white"
+            className="mt-4 rounded-xl bg-[#071D49] px-5 py-2.5 text-sm font-extrabold text-white"
           >
-            Try again
+            ↻ Try again
           </button>
         </div>
       ) : filteredJourneys.length === 0 ? (
-        <div className="rounded-2xl border border-[#E2E7EE] bg-white px-6 py-10 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-50 text-2xl">
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FFF4E8] text-3xl">
             ✈️
           </div>
           <h3 className="mt-4 text-base font-extrabold text-[#172536]">
-            No journeys here yet
+            {search ? "No matching trips found" : "No journeys here yet"}
           </h3>
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#687789]">
-            {filter === "all"
+          <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-slate-500">
+            {search
+              ? "Try adjusting your search keywords or clearing your active filter."
+              : filter === "all"
               ? "Create your first journey to begin organising your travel."
               : "Journeys matching this category will appear here."}
           </p>
-          {filter === "all" && (
+          {filter === "all" && !search && (
             <button
               type="button"
               onClick={openCreate}
-              className="mt-5 rounded-xl bg-[#071D49] px-5 py-3 text-sm font-bold text-white"
+              className="mt-5 rounded-xl bg-[#071D49] px-5 py-3 text-sm font-extrabold text-white hover:bg-[#102E6B]"
             >
-              + Create a journey
+              ➕ Plan a Journey
             </button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {filteredJourneys.map((journey) => {
-            const mode = MODES.find((item) => item.value === journey.transport_mode);
+            const meta = STATUS_META[journey.status];
 
             return (
               <button
@@ -522,47 +629,69 @@ export default function JourneyManagementClient({
                   setModal("details");
                   setNotice("");
                 }}
-                className="w-full rounded-2xl border border-[#E2E7EE] bg-white p-4 text-left transition hover:border-[#F28C28] hover:shadow-sm sm:p-5"
+                className="group flex w-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 text-left transition hover:border-[#F28C28] hover:shadow-md"
               >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-xl">
-                    {mode?.icon ?? "🚘"}
+                <div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#FFF4E8] text-2xl">
+                      {getModeEmoji(journey.transport_mode)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="truncate text-sm font-extrabold text-[#172536] sm:text-base">
+                        {journey.journey_name}
+                      </h4>
+                      <p className="mt-0.5 text-xs font-medium text-slate-500">
+                        🕒 {formatDate(journey.departure_at)}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-extrabold ${meta.badgeClass}`}
+                    >
+                      {meta.emoji} {meta.label}
+                    </span>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <h4 className="truncate text-sm font-extrabold text-[#172536]">
-                      {journey.journey_name}
-                    </h4>
-                    <p className="mt-1 text-xs text-[#687789]">
-                      {formatDate(journey.departure_at)}
-                    </p>
-                  </div>
-                  <span className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-extrabold ${STATUS_COLORS[journey.status]}`}>
-                    {statusLabel(journey.status)}
-                  </span>
-                </div>
 
-                <div className="mt-5 flex gap-3 pl-2">
-                  <div className="flex w-3 shrink-0 flex-col items-center py-1">
-                    <span className="h-2.5 w-2.5 rounded-full border-2 border-emerald-600 bg-white" />
-                    <span className="my-1 h-6 w-px bg-slate-300" />
-                    <span className="h-2.5 w-2.5 rounded-sm bg-[#F28C28]" />
-                  </div>
-                  <div className="flex min-h-12 flex-1 flex-col justify-between gap-3">
-                    <p className="truncate text-sm font-semibold text-[#344456]">
-                      {journey.origin_name}
-                    </p>
-                    <p className="truncate text-sm font-semibold text-[#344456]">
-                      {journey.destination_name}
-                    </p>
+                  {/* Visual Route Container */}
+                  <div className="mt-4 flex gap-3 rounded-xl bg-slate-50 p-3.5">
+                    <div className="flex w-3 shrink-0 flex-col items-center py-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full border-2 border-emerald-600 bg-white" />
+                      <span className="my-1 h-7 w-px bg-slate-300" />
+                      <span className="h-2.5 w-2.5 rounded-sm bg-[#F28C28]" />
+                    </div>
+                    <div className="flex flex-1 flex-col justify-between gap-2.5 overflow-hidden">
+                      <div>
+                        <p className="text-[9px] font-extrabold tracking-wider text-slate-400">
+                          FROM
+                        </p>
+                        <p className="truncate text-xs font-bold text-slate-800 sm:text-sm">
+                          {journey.origin_name}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-extrabold tracking-wider text-slate-400">
+                          TO
+                        </p>
+                        <p className="truncate text-xs font-bold text-slate-800 sm:text-sm">
+                          {journey.destination_name}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                  <span className="text-[10px] font-bold tracking-wide text-[#687789]">
-                    {journey.transport_mode.toUpperCase()} JOURNEY
-                  </span>
-                  <span className="text-xs font-extrabold text-[#F28C28]">
-                    View details ›
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold tracking-wider text-slate-500">
+                      {journey.transport_mode.toUpperCase()} TRIP
+                    </span>
+                    {journey.location_sharing_enabled && (
+                      <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-extrabold text-emerald-700">
+                        📡 GPS Live
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs font-extrabold text-[#F28C28] transition group-hover:translate-x-0.5">
+                    Manage trip ›
                   </span>
                 </div>
               </button>
@@ -571,161 +700,180 @@ export default function JourneyManagementClient({
         </div>
       )}
 
-      <div className="flex items-start gap-3 rounded-xl bg-[#EAF6F1] p-4">
-        <span className="text-lg text-emerald-700">🛡️</span>
-        <p className="text-xs leading-5 text-[#41685A]">
-          Your journey information is protected by your account permissions.
-          Location sharing is off unless you explicitly enable it in a supported feature.
+      {/* Privacy Banner */}
+      <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4">
+        <span className="text-lg">🛡️</span>
+        <p className="text-xs leading-relaxed text-emerald-900">
+          Your journey data is protected by your account permissions. Live location sharing stays off unless you explicitly enable it inside a journey.
         </p>
       </div>
 
+      {/* Create / Edit Modal */}
       {modal === "form" && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#071D49]/65 p-3 backdrop-blur-sm sm:p-5">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#071D49]/65 p-3 backdrop-blur-xs sm:p-5">
           <form
             onSubmit={saveJourney}
-            className="flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-[#F4F6F9] shadow-2xl"
+            className="flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-[#F4F6F9] shadow-2xl"
           >
-            <div className="flex items-center justify-between border-b border-[#E2E7EE] bg-white px-5 py-4">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
               <h3 className="text-base font-extrabold text-[#172536]">
-                {editing ? "Edit journey" : "Plan a journey"}
+                {editing ? "✏️ Edit Journey" : "🧭 Plan a Journey"}
               </h3>
               <button
                 type="button"
                 onClick={closeModal}
                 disabled={saving}
                 aria-label="Close form"
-                className="rounded-xl bg-[#F4F6F9] px-3 py-2 text-lg text-[#172536]"
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-lg font-bold text-slate-600 hover:bg-slate-200"
               >
                 ×
               </button>
             </div>
 
-            <div className="overflow-y-auto p-5 sm:p-6">
-              <h4 className="mb-4 text-sm font-extrabold text-[#071D49]">
-                Journey information
-              </h4>
+            <div className="space-y-4 overflow-y-auto p-5 sm:p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <h4 className="mb-4 text-sm font-extrabold text-[#071D49]">
+                  📍 Route & Trip Information
+                </h4>
 
-              <div className="space-y-4">
-                <label className="block text-xs font-bold text-[#344456]">
-                  Journey name *
-                  <input
-                    required
-                    value={form.journey_name}
-                    onChange={(e) => updateField("journey_name", e.target.value)}
-                    placeholder="e.g. Business trip to Abuja"
-                    className={inputClass()}
-                  />
-                </label>
+                <div className="space-y-4">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Journey name *
+                    <input
+                      required
+                      value={form.journey_name}
+                      onChange={(e) => updateField("journey_name", e.target.value)}
+                      placeholder="e.g. Business trip to Abuja"
+                      className={inputClass()}
+                    />
+                  </label>
 
-                <label className="block text-xs font-bold text-[#344456]">
-                  Departure location *
-                  <input
-                    required
-                    value={form.origin_name}
-                    onChange={(e) => updateField("origin_name", e.target.value)}
-                    placeholder="City or place of departure"
-                    className={inputClass()}
-                  />
-                </label>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Departure location *
+                      <input
+                        required
+                        value={form.origin_name}
+                        onChange={(e) => updateField("origin_name", e.target.value)}
+                        placeholder="City or terminal"
+                        className={inputClass()}
+                      />
+                    </label>
 
-                <label className="block text-xs font-bold text-[#344456]">
-                  Departure address
-                  <input
-                    value={form.origin_address}
-                    onChange={(e) => updateField("origin_address", e.target.value)}
-                    placeholder="Street address (optional)"
-                    className={inputClass()}
-                  />
-                </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      Departure address
+                      <input
+                        value={form.origin_address}
+                        onChange={(e) => updateField("origin_address", e.target.value)}
+                        placeholder="Street address (optional)"
+                        className={inputClass()}
+                      />
+                    </label>
+                  </div>
 
-                <label className="block text-xs font-bold text-[#344456]">
-                  Destination *
-                  <input
-                    required
-                    value={form.destination_name}
-                    onChange={(e) => updateField("destination_name", e.target.value)}
-                    placeholder="City or destination"
-                    className={inputClass()}
-                  />
-                </label>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Destination *
+                      <input
+                        required
+                        value={form.destination_name}
+                        onChange={(e) => updateField("destination_name", e.target.value)}
+                        placeholder="City or destination"
+                        className={inputClass()}
+                      />
+                    </label>
 
-                <label className="block text-xs font-bold text-[#344456]">
-                  Destination address
-                  <input
-                    value={form.destination_address}
-                    onChange={(e) => updateField("destination_address", e.target.value)}
-                    placeholder="Street address (optional)"
+                    <label className="block text-xs font-bold text-slate-700">
+                      Destination address
+                      <input
+                        value={form.destination_address}
+                        onChange={(e) => updateField("destination_address", e.target.value)}
+                        placeholder="Street address (optional)"
+                        className={inputClass()}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <h4 className="mb-4 text-sm font-extrabold text-[#071D49]">
+                  🕒 Schedule & Transport Mode
+                </h4>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Departure date and time *
+                    <input
+                      type="datetime-local"
+                      required
+                      value={form.departure_at}
+                      onChange={(e) => updateField("departure_at", e.target.value)}
+                      className={inputClass()}
+                    />
+                  </label>
+
+                  <label className="block text-xs font-bold text-slate-700">
+                    Expected arrival
+                    <input
+                      type="datetime-local"
+                      value={form.expected_arrival_at}
+                      onChange={(e) => updateField("expected_arrival_at", e.target.value)}
+                      className={inputClass()}
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-5">
+                  <span className="block text-xs font-bold text-slate-700">
+                    Transport mode
+                  </span>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {MODES.map((mode) => {
+                      const active = form.transport_mode === mode.value;
+                      return (
+                        <button
+                          key={mode.value}
+                          type="button"
+                          onClick={() => updateField("transport_mode", mode.value)}
+                          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition ${
+                            active
+                              ? "border-[#F28C28] bg-[#FFF4E8] text-[#9A3412]"
+                              : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-white"
+                          }`}
+                        >
+                          <span className="text-base">{mode.emoji}</span>
+                          <span>{mode.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <label className="mt-5 block text-xs font-bold text-slate-700">
+                  📝 Additional notes
+                  <textarea
+                    rows={3}
+                    value={form.notes}
+                    onChange={(e) => updateField("notes", e.target.value)}
+                    placeholder="Flight number, hotel check-in, or emergency notes..."
                     className={inputClass()}
                   />
                 </label>
               </div>
 
-              <h4 className="mb-4 mt-7 text-sm font-extrabold text-[#071D49]">
-                Travel schedule
-              </h4>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-xs font-bold text-[#344456]">
-                  Departure date and time *
-                  <input
-                    type="datetime-local"
-                    required
-                    value={form.departure_at}
-                    onChange={(e) => updateField("departure_at", e.target.value)}
-                    className={inputClass()}
-                  />
-                </label>
-
-                <label className="block text-xs font-bold text-[#344456]">
-                  Expected arrival
-                  <input
-                    type="datetime-local"
-                    value={form.expected_arrival_at}
-                    onChange={(e) => updateField("expected_arrival_at", e.target.value)}
-                    className={inputClass()}
-                  />
-                </label>
-              </div>
-
-              <h4 className="mb-3 mt-7 text-xs font-bold text-[#344456]">
-                Transport mode
-              </h4>
-
-              <div className="flex flex-wrap gap-2">
-                {MODES.map((mode) => (
-                  <button
-                    key={mode.value}
-                    type="button"
-                    onClick={() => updateField("transport_mode", mode.value)}
-                    className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-xs font-bold transition ${
-                      form.transport_mode === mode.value
-                        ? "border-[#F28C28] bg-orange-50 text-[#A94E0B]"
-                        : "border-[#E2E7EE] bg-white text-[#687789]"
-                    }`}
-                  >
-                    <span>{mode.icon}</span>
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
-
-              <label className="mt-6 block text-xs font-bold text-[#344456]">
-                Additional notes
-                <textarea
-                  rows={4}
-                  value={form.notes}
-                  onChange={(e) => updateField("notes", e.target.value)}
-                  placeholder="Travel details or information for your reference"
-                  className={inputClass()}
-                />
-              </label>
-
-              <div className="mt-5 rounded-xl bg-[#FFF4DF] p-3 text-xs leading-5 text-[#79531C]">
-                New journeys are saved as drafts. You can schedule them after reviewing the details.
+              <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs leading-relaxed text-amber-900">
+                <span className="text-base">💡</span>
+                <p>
+                  New journeys are saved as drafts first so you can review everything before scheduling.
+                </p>
               </div>
 
               {notice && (
-                <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                <p
+                  role="alert"
+                  className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                >
                   {notice}
                 </p>
               )}
@@ -733,96 +881,131 @@ export default function JourneyManagementClient({
               <button
                 type="submit"
                 disabled={saving}
-                className="mt-5 flex min-h-12 w-full items-center justify-center rounded-xl bg-[#071D49] px-5 py-3 text-sm font-extrabold text-white transition hover:bg-blue-900 disabled:opacity-60"
+                className="flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#071D49] px-5 py-3 text-sm font-extrabold text-white transition hover:bg-[#102E6B] disabled:opacity-60"
               >
                 {saving
                   ? "Saving..."
                   : editing
-                    ? "✓ Save changes"
-                    : "✓ Save journey"}
+                  ? "✅ Save Changes"
+                  : "✨ Save Journey"}
               </button>
             </div>
           </form>
         </div>
       )}
 
+      {/* Details Modal */}
       {modal === "details" && selected && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#071D49]/65 p-3 backdrop-blur-sm sm:p-5">
-          <div className="flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-[#F4F6F9] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#E2E7EE] bg-white px-5 py-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#071D49]/65 p-3 backdrop-blur-xs sm:p-5">
+          <div className="flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-[#F4F6F9] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
               <h3 className="text-base font-extrabold text-[#172536]">
-                Journey details
+                🧭 Journey Details
               </h3>
               <button
                 type="button"
                 onClick={closeModal}
                 disabled={saving}
                 aria-label="Close details"
-                className="rounded-xl bg-[#F4F6F9] px-3 py-2 text-lg text-[#172536]"
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-lg font-bold text-slate-600 hover:bg-slate-200"
               >
                 ×
               </button>
             </div>
 
             <div className="overflow-y-auto p-5 sm:p-6">
-              <div className="flex flex-col items-center py-4 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-100 text-2xl">
-                  ➤
+              <div className="flex flex-col items-center py-3 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FFF4E8] text-3xl">
+                  {getModeEmoji(selected.transport_mode)}
                 </div>
-                <h4 className="mt-3 text-lg font-extrabold text-[#172536]">
+                <h4 className="mt-3 text-xl font-extrabold text-[#172536]">
                   {selected.journey_name}
                 </h4>
-                <span className={`mt-3 rounded-full px-3 py-1.5 text-xs font-extrabold ${STATUS_COLORS[selected.status]}`}>
-                  {statusLabel(selected.status)}
+                <span
+                  className={`mt-2.5 rounded-full border px-3.5 py-1 text-xs font-extrabold ${STATUS_META[selected.status].badgeClass}`}
+                >
+                  {STATUS_META[selected.status].emoji} {STATUS_META[selected.status].label}
                 </span>
               </div>
 
-              <div className="mt-3 rounded-xl border border-[#E2E7EE] bg-white p-4">
-                <h4 className="mb-4 text-xs font-extrabold text-[#071D49]">Route</h4>
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-5">
+                <h4 className="mb-4 text-xs font-extrabold tracking-wide text-[#071D49]">
+                  📍 ROUTE OVERVIEW
+                </h4>
                 <div className="flex gap-3">
                   <span className="mt-1 h-3 w-3 shrink-0 rounded-full border-2 border-emerald-600" />
                   <div>
-                    <p className="text-[10px] font-extrabold tracking-wider text-[#687789]">FROM</p>
-                    <p className="mt-1 text-sm font-bold text-[#172536]">{selected.origin_name}</p>
+                    <p className="text-[10px] font-extrabold tracking-wider text-slate-400">
+                      FROM
+                    </p>
+                    <p className="mt-0.5 text-sm font-bold text-[#172536]">
+                      {selected.origin_name}
+                    </p>
                     {selected.origin_address && (
-                      <p className="mt-1 text-xs text-[#687789]">{selected.origin_address}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {selected.origin_address}
+                      </p>
                     )}
                   </div>
                 </div>
-                <div className="my-4 ml-1.5 h-5 border-l border-dashed border-slate-300" />
+                <div className="my-3.5 ml-1.5 h-5 border-l border-dashed border-slate-300" />
                 <div className="flex gap-3">
                   <span className="mt-1 h-3 w-3 shrink-0 rounded-sm bg-[#F28C28]" />
                   <div>
-                    <p className="text-[10px] font-extrabold tracking-wider text-[#687789]">TO</p>
-                    <p className="mt-1 text-sm font-bold text-[#172536]">{selected.destination_name}</p>
+                    <p className="text-[10px] font-extrabold tracking-wider text-slate-400">
+                      TO
+                    </p>
+                    <p className="mt-0.5 text-sm font-bold text-[#172536]">
+                      {selected.destination_name}
+                    </p>
                     {selected.destination_address && (
-                      <p className="mt-1 text-xs text-[#687789]">{selected.destination_address}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {selected.destination_address}
+                      </p>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="mt-3 rounded-xl border border-[#E2E7EE] bg-white p-4">
-                <h4 className="mb-3 text-xs font-extrabold text-[#071D49]">Schedule and travel</h4>
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-5">
+                <h4 className="mb-3 text-xs font-extrabold tracking-wide text-[#071D49]">
+                  🕒 SCHEDULE & LOGISTICS
+                </h4>
                 {[
                   ["Departure", formatDate(selected.departure_at)],
                   ["Expected arrival", formatDate(selected.expected_arrival_at)],
-                  ["Transport", selected.transport_mode.toUpperCase()],
+                  [
+                    "Transport",
+                    `${getModeEmoji(selected.transport_mode)} ${selected.transport_mode.toUpperCase()}`,
+                  ],
                   ["Timezone", selected.departure_timezone],
-                  ...(selected.started_at ? [["Started", formatDate(selected.started_at)]] : []),
-                  ...(selected.completed_at ? [["Completed", formatDate(selected.completed_at)]] : []),
+                  ...(selected.started_at
+                    ? [["Started", formatDate(selected.started_at)]]
+                    : []),
+                  ...(selected.completed_at
+                    ? [["Completed", formatDate(selected.completed_at)]]
+                    : []),
                 ].map(([label, value]) => (
-                  <div key={label} className="flex justify-between gap-4 border-b border-slate-100 py-3 last:border-0">
-                    <span className="text-xs text-[#687789]">{label}</span>
-                    <span className="text-right text-xs font-bold text-[#172536]">{value}</span>
+                  <div
+                    key={label}
+                    className="flex justify-between gap-4 border-b border-slate-100 py-2.5 last:border-0"
+                  >
+                    <span className="text-xs text-slate-500">{label}</span>
+                    <span className="text-right text-xs font-bold text-[#172536]">
+                      {value}
+                    </span>
                   </div>
                 ))}
               </div>
 
               {selected.notes && (
-                <div className="mt-3 rounded-xl border border-[#E2E7EE] bg-white p-4">
-                  <h4 className="mb-2 text-xs font-extrabold text-[#071D49]">Notes</h4>
-                  <p className="whitespace-pre-wrap text-sm leading-6 text-[#445366]">{selected.notes}</p>
+                <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-5">
+                  <h4 className="mb-2 text-xs font-extrabold tracking-wide text-[#071D49]">
+                    📝 TRAVELLER NOTES
+                  </h4>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
+                    {selected.notes}
+                  </p>
                 </div>
               )}
 
@@ -834,91 +1017,91 @@ export default function JourneyManagementClient({
               </div>
 
               {selected.status === "draft" && (
-                <>
+                <div className="mt-4 space-y-2.5">
                   <button
                     type="button"
                     disabled={saving}
                     onClick={() => void changeStatus(selected, "scheduled")}
-                    className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-50"
+                    className="flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white hover:bg-[#102E6B] disabled:opacity-50"
                   >
-                    Schedule journey
+                    📅 Schedule Journey
                   </button>
                   <button
                     type="button"
                     disabled={saving}
                     onClick={() => openEdit(selected)}
-                    className="mt-2 flex min-h-11 w-full items-center justify-center rounded-xl border border-[#E2E7EE] bg-white px-4 py-3 text-sm font-bold text-[#071D49] disabled:opacity-50"
+                    className="flex min-h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-[#071D49] hover:bg-slate-50 disabled:opacity-50"
                   >
-                    Edit journey
+                    ✏️ Edit Details
                   </button>
                   <button
                     type="button"
                     disabled={saving}
                     onClick={() => void changeStatus(selected, "cancelled")}
-                    className="mt-2 w-full p-3 text-xs font-bold text-red-600 disabled:opacity-50"
+                    className="w-full p-2.5 text-xs font-bold text-red-600 hover:underline disabled:opacity-50"
                   >
-                    Cancel journey
+                    🚫 Cancel Journey
                   </button>
-                </>
+                </div>
               )}
 
               {selected.status === "scheduled" && (
-                <>
+                <div className="mt-4 space-y-2.5">
                   <button
                     type="button"
                     disabled={saving}
                     onClick={() => void changeStatus(selected, "active")}
-                    className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-50"
+                    className="flex min-h-12 w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50"
                   >
-                    Start journey
+                    🟢 Start Journey Now
                   </button>
                   <button
                     type="button"
                     disabled={saving}
                     onClick={() => openEdit(selected)}
-                    className="mt-2 flex min-h-11 w-full items-center justify-center rounded-xl border border-[#E2E7EE] bg-white px-4 py-3 text-sm font-bold text-[#071D49] disabled:opacity-50"
+                    className="flex min-h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-[#071D49] hover:bg-slate-50 disabled:opacity-50"
                   >
-                    Edit journey
+                    ✏️ Edit Details
                   </button>
                   <button
                     type="button"
                     disabled={saving}
                     onClick={() => void changeStatus(selected, "cancelled")}
-                    className="mt-2 w-full p-3 text-xs font-bold text-red-600 disabled:opacity-50"
+                    className="w-full p-2.5 text-xs font-bold text-red-600 hover:underline disabled:opacity-50"
                   >
-                    Cancel journey
+                    🚫 Cancel Journey
                   </button>
-                </>
+                </div>
               )}
 
               {selected.status === "active" && (
-                <>
+                <div className="mt-4 space-y-2.5">
                   <button
                     type="button"
                     disabled={saving}
                     onClick={() => void changeStatus(selected, "completed")}
-                    className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-50"
+                    className="flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white hover:bg-[#102E6B] disabled:opacity-50"
                   >
-                    Complete journey
+                    🏁 Complete Journey
                   </button>
                   <button
                     type="button"
                     disabled={saving}
                     onClick={() => void changeStatus(selected, "cancelled")}
-                    className="mt-2 w-full p-3 text-xs font-bold text-red-600 disabled:opacity-50"
+                    className="w-full p-2.5 text-xs font-bold text-red-600 hover:underline disabled:opacity-50"
                   >
-                    Cancel journey
+                    🚫 Cancel Journey
                   </button>
-                </>
+                </div>
               )}
 
               <button
                 type="button"
                 onClick={closeModal}
                 disabled={saving}
-                className="mt-3 w-full rounded-xl border border-[#E2E7EE] bg-white px-4 py-3 text-sm font-bold text-[#687789]"
+                className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
               >
-                Close details
+                Close Details
               </button>
             </div>
           </div>
