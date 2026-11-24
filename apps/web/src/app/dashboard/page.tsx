@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
@@ -16,7 +15,6 @@ export const metadata: Metadata = {
 interface ServiceItem {
   number: string;
   category: string;
-  emoji: string;
   title: string;
   description: string;
   image: string;
@@ -30,10 +28,8 @@ const services: ServiceItem[] = [
   {
     number: "01",
     category: "JOURNEY MANAGEMENT",
-    emoji: "🧭",
     title: "My Journeys",
-    description:
-      "Plan trips, activate travel safety, and view your journey history.",
+    description: "Plan trips, activate travel safety and view your journey history.",
     image: "photo-1436491865332-7a61a109cc05",
     titleColorClass: "text-blue-700 group-hover:text-blue-800",
     accentDotClass: "bg-blue-600",
@@ -43,10 +39,8 @@ const services: ServiceItem[] = [
   {
     number: "06",
     category: "EMERGENCY OPERATIONS",
-    emoji: "🚨",
     title: "Emergency Support",
-    description:
-      "Request rapid assistance and follow up on live emergency alerts.",
+    description: "Request assistance and follow up on emergency alerts.",
     image: "photo-1584515933487-779824d29309",
     titleColorClass: "text-amber-700 group-hover:text-amber-800",
     accentDotClass: "bg-amber-500",
@@ -56,9 +50,8 @@ const services: ServiceItem[] = [
   {
     number: "02",
     category: "WALLET MANAGEMENT",
-    emoji: "👛",
     title: "My Wallet",
-    description: "View your wallet balance, fund safely, and track transactions.",
+    description: "View your wallet, balances and transaction history.",
     href: "/dashboard/wallet",
     image: "photo-1554224155-6726b3ff858f",
     titleColorClass: "text-emerald-700 group-hover:text-emerald-800",
@@ -67,9 +60,8 @@ const services: ServiceItem[] = [
   {
     number: "03",
     category: "PAYMENTS",
-    emoji: "💳",
     title: "Payments",
-    description: "Manage travel payments, references, and payment activity.",
+    description: "Manage travel payments and review payment activity.",
     href: "/dashboard/payments",
     image: "photo-1556742049-0cfed4f6a45d",
     titleColorClass: "text-indigo-700 group-hover:text-indigo-800",
@@ -78,21 +70,18 @@ const services: ServiceItem[] = [
   {
     number: "04",
     category: "SAFETY PROTECTION",
-    emoji: "🛡️",
     title: "Travel Protection",
-    description:
-      "Explore trip-based protection and manage your active travel coverage.",
+    description: "Explore trip-based protection and manage your travel coverage.",
     image: "photo-1519681393784-d120267933ba",
-    titleColorClass: "text-[#187B83] group-hover:text-[#136268]",
-    accentDotClass: "bg-[#187B83]",
+    titleColorClass: "text-teal-700 group-hover:text-teal-800",
+    accentDotClass: "bg-teal-600",
     href: "/dashboard/safety",
   },
   {
     number: "05",
     category: "GPS TRACKING",
-    emoji: "📍",
     title: "Live Location",
-    description: "Control location sharing and real-time journey tracking.",
+    description: "Manage location sharing and journey tracking.",
     image: "photo-1473448912268-2022ce9509d8",
     titleColorClass: "text-cyan-700 group-hover:text-cyan-800",
     accentDotClass: "bg-cyan-600",
@@ -101,10 +90,8 @@ const services: ServiceItem[] = [
   {
     number: "07",
     category: "CLAIMS & COMPENSATION",
-    emoji: "📄",
     title: "Claims Centre",
-    description:
-      "Submit and follow up on eligible travel claims and compensation.",
+    description: "Submit and follow up on eligible claims and compensation.",
     image: "photo-1450101499163-c8848c66ca85",
     titleColorClass: "text-violet-700",
     accentDotClass: "bg-violet-600",
@@ -112,10 +99,8 @@ const services: ServiceItem[] = [
   {
     number: "08",
     category: "TRAVEL PARTNERS",
-    emoji: "🏥",
     title: "Partner Network",
-    description:
-      "Discover verified hospitals, emergency responders, and travel partners.",
+    description: "Discover hospitals, responders and verified travel partners.",
     image: "photo-1521737711867-e3b97375f902",
     titleColorClass: "text-green-700",
     accentDotClass: "bg-green-600",
@@ -123,10 +108,8 @@ const services: ServiceItem[] = [
   {
     number: "09",
     category: "ANALYTICS & INTELLIGENCE",
-    emoji: "📊",
     title: "Travel Insights",
-    description:
-      "View journey activity, safety advisories, and account insights.",
+    description: "View journey activity, safety information and account insights.",
     image: "photo-1516321318423-f06f85e504b3",
     titleColorClass: "text-sky-700",
     accentDotClass: "bg-sky-600",
@@ -136,14 +119,6 @@ const services: ServiceItem[] = [
 function imageUrl(photo: string) {
   return `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=1000&q=85`;
 }
-
-const navItems = [
-  { href: "/dashboard/journeys", emoji: "🧭", label: "My Journeys" },
-  { href: "/dashboard/wallet", emoji: "👛", label: "My Wallet" },
-  { href: "/dashboard/payments", emoji: "💳", label: "Payments" },
-  { href: "/dashboard/safety", emoji: "🛡️", label: "Travel Protection" },
-  { href: "/dashboard/gps-tracking", emoji: "📍", label: "Live Location" },
-];
 
 function SidebarContent({
   fullName,
@@ -158,9 +133,9 @@ function SidebarContent({
         {/* Brand Header */}
         <Link
           href="/"
-          className="group flex items-center gap-3 rounded-2xl border border-[#F5A623]/25 bg-white/[0.05] p-3 transition hover:border-[#F5A623]/50 hover:bg-white/[0.08]"
+          className="group flex items-center gap-3 rounded-xl border border-[#F5A623]/20 bg-white/[0.04] p-2.5 transition-colors hover:border-[#F5A623]/45 hover:bg-white/[0.07]"
         >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#FBBF24] to-[#E98012] text-xs font-black tracking-wider text-[#0A1F44] shadow-xs transition-transform group-hover:scale-105">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#FBBF24] to-[#F5A623] text-xs font-black tracking-wider text-[#0A1F44] shadow-sm transition-transform group-hover:scale-105">
             TSC
           </div>
           <div className="leading-tight">
@@ -173,17 +148,17 @@ function SidebarContent({
           </div>
         </Link>
 
-        {/* Traveller Profile Card */}
-        <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-3.5">
+        {/* Traveller Profile Card (Green Accent Theme) */}
+        <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/10 p-3.5 shadow-xs">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-300/40 bg-[#187B83] text-xs font-black text-white shadow-2xs">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-300/40 bg-emerald-500 text-xs font-black text-white shadow-xs">
               {initials || "JJ"}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-extrabold text-white">
+              <p className="truncate text-xs font-bold text-white">
                 {fullName}
               </p>
-              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
                 <span>Active Protection</span>
               </div>
@@ -191,10 +166,10 @@ function SidebarContent({
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* Quick Access Navigation */}
         <nav aria-label="Quick Access" className="space-y-1.5">
-          <div className="flex items-center justify-between px-2 pb-1">
-            <p className="text-[10px] font-extrabold tracking-[0.14em] text-[#F5A623]/85 uppercase">
+          <div className="flex items-center justify-between px-2.5 pb-1">
+            <p className="text-[10px] font-bold tracking-[0.14em] text-[#F5A623]/80 uppercase">
               Quick Access
             </p>
             <span className="ml-2.5 h-px flex-1 bg-[#F5A623]/20" />
@@ -202,7 +177,7 @@ function SidebarContent({
 
           <a
             href="#overview"
-            className="flex items-center justify-between rounded-xl bg-[#F5A623] px-3.5 py-2.5 text-xs font-extrabold text-[#0A1F44] shadow-2xs"
+            className="flex items-center justify-between rounded-xl bg-[#F5A623] px-3.5 py-2.5 text-xs font-extrabold text-[#0A1F44] shadow-sm transition-all"
           >
             <span className="flex items-center gap-2.5">
               <span aria-hidden="true" className="text-sm">
@@ -215,30 +190,81 @@ function SidebarContent({
             </span>
           </a>
 
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="group flex items-center justify-between rounded-xl border border-transparent px-3.5 py-2.5 text-xs font-semibold text-slate-200 transition hover:border-[#F5A623]/30 hover:bg-white/[0.08] hover:text-white"
+          <Link
+            href="/dashboard/journeys"
+            className="group flex items-center justify-between rounded-xl border border-transparent px-3.5 py-2.5 text-xs font-semibold text-slate-200 transition-all hover:border-[#F5A623]/30 hover:bg-white/[0.08] hover:text-white"
+          >
+            <span className="flex items-center gap-2.5">
+              <span aria-hidden="true" className="text-sm">
+                🧭
+              </span>
+              <span>My Journeys</span>
+            </span>
+            <span
+              aria-hidden="true"
+              className="text-xs text-[#F5A623] transition-transform group-hover:translate-x-0.5"
             >
-              <span className="flex items-center gap-2.5">
-                <span aria-hidden="true" className="text-sm">
-                  {item.emoji}
-                </span>
-                <span>{item.label}</span>
+              →
+            </span>
+          </Link>
+
+          <Link
+            href="/dashboard/wallet"
+            className="group flex items-center justify-between rounded-xl border border-transparent px-3.5 py-2.5 text-xs font-semibold text-slate-200 transition-all hover:border-[#F5A623]/30 hover:bg-white/[0.08] hover:text-white"
+          >
+            <span className="flex items-center gap-2.5">
+              <span aria-hidden="true" className="text-sm">
+                💳
               </span>
-              <span
-                aria-hidden="true"
-                className="text-xs text-[#F5A623] transition-transform group-hover:translate-x-0.5"
-              >
-                →
+              <span>My Wallet</span>
+            </span>
+            <span
+              aria-hidden="true"
+              className="text-xs text-[#F5A623] transition-transform group-hover:translate-x-0.5"
+            >
+              →
+            </span>
+          </Link>
+
+          <Link
+            href="/dashboard/safety"
+            className="group flex items-center justify-between rounded-xl border border-transparent px-3.5 py-2.5 text-xs font-semibold text-slate-200 transition-all hover:border-[#F5A623]/30 hover:bg-white/[0.08] hover:text-white"
+          >
+            <span className="flex items-center gap-2.5">
+              <span aria-hidden="true" className="text-sm">
+                🛡️
               </span>
-            </Link>
-          ))}
+              <span>Travel Protection</span>
+            </span>
+            <span
+              aria-hidden="true"
+              className="text-xs text-[#F5A623] transition-transform group-hover:translate-x-0.5"
+            >
+              →
+            </span>
+          </Link>
+
+          <Link
+            href="/dashboard/gps-tracking"
+            className="group flex items-center justify-between rounded-xl border border-transparent px-3.5 py-2.5 text-xs font-semibold text-slate-200 transition-all hover:border-[#F5A623]/30 hover:bg-white/[0.08] hover:text-white"
+          >
+            <span className="flex items-center gap-2.5">
+              <span aria-hidden="true" className="text-sm">
+                📍
+              </span>
+              <span>Live Location</span>
+            </span>
+            <span
+              aria-hidden="true"
+              className="text-xs text-[#F5A623] transition-transform group-hover:translate-x-0.5"
+            >
+              →
+            </span>
+          </Link>
 
           <Link
             href="/dashboard/emergency"
-            className="group mt-2 flex items-center justify-between rounded-xl border border-[#F5A623]/45 bg-[#F5A623]/15 px-3.5 py-2.5 text-xs font-bold text-[#FBBF24] transition hover:border-[#F5A623] hover:bg-[#F5A623]/25"
+            className="group mt-2 flex items-center justify-between rounded-xl border border-[#F5A623]/45 bg-[#F5A623]/15 px-3.5 py-2.5 text-xs font-bold text-[#FBBF24] transition-all hover:border-[#F5A623] hover:bg-[#F5A623]/25"
           >
             <span className="flex items-center gap-2.5">
               <span aria-hidden="true" className="text-sm">
@@ -264,7 +290,7 @@ function SidebarContent({
         <form action={signOut}>
           <button
             type="submit"
-            className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-[#F5A623]/30 bg-white/[0.06] px-3.5 py-2.5 text-xs font-bold text-white transition hover:border-[#F5A623] hover:bg-[#F5A623] hover:text-[#0A1F44]"
+            className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-[#F5A623]/30 bg-white/[0.06] px-3.5 py-2.5 text-xs font-bold text-white transition-all hover:border-[#F5A623] hover:bg-[#F5A623] hover:text-[#0A1F44]"
           >
             <span className="flex items-center gap-2">
               <span aria-hidden="true" className="text-sm">
@@ -280,31 +306,7 @@ function SidebarContent({
   );
 }
 
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="h-28 animate-pulse rounded-2xl border border-[#E6ECF2] bg-white p-5" />
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {[0, 1].map((item) => (
-          <div
-            key={item}
-            className="h-44 animate-pulse rounded-2xl border border-[#E6ECF2] bg-white p-4"
-          />
-        ))}
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {[0, 1, 2, 3, 4, 5].map((item) => (
-          <div
-            key={item}
-            className="h-64 animate-pulse rounded-2xl border border-[#E6ECF2] bg-white p-4"
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-async function TravellerDashboardContent() {
+export default async function TravellerDashboard() {
   await connection();
 
   const supabase = await createSupabaseServerClient();
@@ -345,7 +347,7 @@ async function TravellerDashboardContent() {
   const standardServices = services.filter((s) => !s.featured);
 
   return (
-    <div className="min-h-screen bg-[#F4F7FB] pb-24 text-[#0A1F44] lg:flex lg:pb-0">
+    <div className="min-h-screen bg-[#F5F7FB] pb-20 text-[#0A1F44] lg:flex lg:pb-0">
       {/* DESKTOP FIXED SIDEBAR */}
       <aside
         aria-label="Desktop navigation sidebar"
@@ -367,7 +369,7 @@ async function TravellerDashboardContent() {
         <label
           htmlFor="mobile-sidebar-toggle"
           aria-label="Close sidebar"
-          className="pointer-events-none fixed inset-0 z-40 bg-[#06132A]/60 opacity-0 backdrop-blur-2xs transition-opacity duration-200 peer-checked:pointer-events-auto peer-checked:opacity-100"
+          className="pointer-events-none fixed inset-0 z-40 bg-[#06132A]/60 opacity-0 backdrop-blur-xs transition-opacity duration-200 peer-checked:pointer-events-auto peer-checked:opacity-100"
         />
 
         {/* Slide-over Sidebar Panel */}
@@ -387,23 +389,23 @@ async function TravellerDashboardContent() {
           </div>
         </aside>
 
-        {/* MOBILE TOP HEADER */}
-        <header className="sticky top-0 z-30 border-b border-[#E6ECF2] bg-white/95 px-4 py-3 backdrop-blur-md">
+        {/* MOBILE TOP HEADER WITH SIDEBAR TRIGGER */}
+        <header className="sticky top-0 z-30 border-b border-[#0A1F44]/10 bg-white/95 px-4 py-3 backdrop-blur-md">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex items-center gap-2.5">
               <label
                 htmlFor="mobile-sidebar-toggle"
-                className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-xl bg-[#0A1F44] px-3 py-1.5 text-xs font-bold text-[#F5A623] shadow-2xs active:scale-95"
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#0A1F44] px-2.5 py-1.5 text-xs font-bold text-[#F5A623] shadow-xs active:scale-95"
               >
                 <span aria-hidden="true">☰</span>
                 <span>Menu</span>
               </label>
 
-              <Link href="/" className="flex min-w-0 items-center gap-2">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F5A623] text-[11px] font-black text-[#0A1F44]">
+              <Link href="/" className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F5A623] text-[11px] font-black text-[#0A1F44]">
                   TSC
                 </span>
-                <span className="truncate text-xs font-extrabold tracking-tight text-[#0A1F44]">
+                <span className="text-xs font-extrabold tracking-tight text-[#0A1F44]">
                   TRAVELLERS SAFETY
                 </span>
               </Link>
@@ -412,10 +414,9 @@ async function TravellerDashboardContent() {
             <form action={signOut}>
               <button
                 type="submit"
-                className="inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-xl border border-[#E6ECF2] bg-[#F4F7FB] px-2.5 py-1.5 text-[11px] font-bold text-[#0A1F44] transition hover:border-[#0A1F44]/30 hover:bg-[#0A1F44] hover:text-[#F5A623]"
+                className="cursor-pointer rounded-lg border border-[#0A1F44]/20 bg-[#F5F7FB] px-2.5 py-1.5 text-[11px] font-bold text-[#0A1F44] hover:bg-[#0A1F44] hover:text-[#F5A623]"
               >
-                <span>🚪</span>
-                <span>Sign out</span>
+                Sign out ↗
               </button>
             </form>
           </div>
@@ -425,51 +426,42 @@ async function TravellerDashboardContent() {
       {/* MAIN WORKSPACE CONTENT */}
       <main id="overview" className="flex-1 lg:pl-64">
         <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-7">
-          {/* Welcome & Quick Actions Card */}
-          <section className="mb-6 rounded-3xl bg-[#102D50] p-5 text-white shadow-sm sm:p-6">
-            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-              <div className="space-y-1.5">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-extrabold tracking-[0.14em] text-[#FBBF24] uppercase">
-                  <span className="h-2 w-2 rounded-full bg-[#E98012]" />
-                  <span>Personal Safety Centre</span>
-                </div>
-                <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">
-                  Welcome back, {firstName} 👋
-                </h1>
-                <p className="max-w-2xl text-xs leading-5 text-[#DCE8F4] sm:text-sm">
-                  Your safety matters every kilometre. Manage your journeys,
-                  wallet, payments, and live protection from one place.
-                </p>
+          {/* Clean Top Greeting Strip */}
+          <section className="mb-6 flex flex-col justify-between gap-4 rounded-2xl border border-[#0A1F44]/10 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:p-5">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 rounded-md bg-[#0A1F44] px-2 py-0.5 text-[10px] font-bold tracking-wider text-[#F5A623] uppercase">
+                <span>YOUR PERSONAL SAFETY CENTRE</span>
               </div>
+              <h1 className="text-base font-bold tracking-tight text-[#0A1F44] sm:text-lg">
+                Welcome back, {firstName}
+              </h1>
+              <p className="text-xs text-slate-600">
+                Your safety matters every kilometre. Manage your trips, wallet,
+                and protection below.
+              </p>
+            </div>
 
-              <div className="flex flex-wrap items-center gap-2.5">
-                <div className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-300/30 bg-emerald-500/15 px-3.5 py-2 text-xs font-bold text-emerald-200">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  <span>Account Active</span>
-                </div>
-                <Link
-                  href="/dashboard/journeys"
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#187B83] px-4 py-2 text-xs font-extrabold text-white shadow-2xs transition hover:bg-[#14686F] sm:text-sm"
-                >
-                  <span>🧭</span>
-                  <span>+ New Journey</span>
-                </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span>Account Active</span>
               </div>
+              <Link
+                href="/dashboard/journeys"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#F5A623] px-3.5 py-2 text-xs font-bold text-[#0A1F44] shadow-sm transition-colors hover:bg-[#FBBF24]"
+              >
+                <span>+ New Journey</span>
+              </Link>
             </div>
           </section>
 
-          {/* PRIORITY OPERATIONS */}
+          {/* PRIORITY SPOTLIGHT: Horizontal Split Cards */}
           <section aria-label="Priority services" className="mb-7">
-            <div className="mb-3.5 flex items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-black tracking-tight text-[#0A1F44] sm:text-base">
-                  Priority Operations ⚡
-                </h2>
-                <p className="text-xs text-[#718096]">
-                  Fast access to trip safety and emergency response
-                </p>
-              </div>
-              <span className="rounded-full border border-[#F5A623]/40 bg-[#F5A623]/15 px-2.5 py-1 text-[10px] font-extrabold tracking-wider text-[#9A6208] uppercase">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xs font-bold tracking-wider text-[#0A1F44] uppercase">
+                Priority Operations
+              </h2>
+              <span className="text-[11px] font-semibold text-[#B47812]">
                 Instant Access
               </span>
             </div>
@@ -479,7 +471,7 @@ async function TravellerDashboardContent() {
                 <Link
                   key={service.number}
                   href={service.href!}
-                  className="group flex flex-col overflow-hidden rounded-2xl border border-[#E6ECF2] bg-white shadow-2xs transition-all hover:-translate-y-0.5 hover:border-[#187B83]/50 hover:shadow-md sm:flex-row"
+                  className="group flex flex-col overflow-hidden rounded-2xl border border-[#0A1F44]/12 bg-white shadow-xs transition-all hover:-translate-y-0.5 hover:border-[#F5A623] hover:shadow-md sm:flex-row"
                 >
                   <div className="relative aspect-[16/10] w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-auto sm:w-44">
                     <img
@@ -492,35 +484,36 @@ async function TravellerDashboardContent() {
                   <div className="flex flex-1 flex-col justify-between p-4">
                     <div>
                       <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-extrabold tracking-wider text-[#187B83] uppercase">
+                        <span className="text-[10px] font-bold tracking-wider text-[#B47812] uppercase">
                           {service.category}
                         </span>
-                        <span className="rounded-md bg-[#102D50] px-2 py-0.5 text-[10px] font-extrabold text-[#FBBF24]">
+                        <span className="rounded bg-[#0A1F44] px-1.5 py-0.5 text-[10px] font-bold text-[#F5A623]">
                           {service.number}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <span aria-hidden="true" className="text-base">
-                          {service.emoji}
-                        </span>
+                        <span
+                          aria-hidden="true"
+                          className={`h-2 w-2 shrink-0 rounded-full ${service.accentDotClass}`}
+                        />
                         <h3
-                          className={`text-sm font-black tracking-tight transition-colors sm:text-base ${service.titleColorClass}`}
+                          className={`text-sm font-extrabold tracking-tight transition-colors ${service.titleColorClass}`}
                         >
                           {service.title}
                         </h3>
                       </div>
 
-                      <p className="mt-1.5 text-xs leading-relaxed text-[#718096]">
+                      <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
                         {service.description}
                       </p>
                     </div>
 
-                    <div className="mt-3.5 flex items-center justify-between border-t border-[#E6ECF2] pt-2.5">
-                      <span className="text-xs font-extrabold text-[#102D50] group-hover:text-[#187B83]">
+                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5">
+                      <span className="text-xs font-bold text-[#0A1F44] group-hover:text-[#B47812]">
                         Open {service.title}
                       </span>
-                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F5A623] text-xs font-black text-[#0A1F44] transition-transform group-hover:translate-x-0.5">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#F5A623] text-xs font-bold text-[#0A1F44] transition-transform group-hover:translate-x-0.5">
                         →
                       </span>
                     </div>
@@ -530,19 +523,19 @@ async function TravellerDashboardContent() {
             </div>
           </section>
 
-          {/* ALL OTHER TRAVEL SERVICES */}
+          {/* ALL OTHER SERVICES */}
           <section id="services" className="mb-8">
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+            <div className="mb-3.5 flex items-center justify-between">
               <div>
-                <h2 className="text-base font-black tracking-tight text-[#0A1F44] sm:text-lg">
-                  All Travel Services 🧳
+                <h2 className="text-sm font-bold text-[#0A1F44]">
+                  All Travel Services
                 </h2>
-                <p className="text-xs text-[#718096]">
-                  Full suite of wallet, payments, protection, and tracking tools
+                <p className="text-xs text-slate-500">
+                  Full suite of protection, wallet, and intelligence modules.
                 </p>
               </div>
-              <span className="rounded-full border border-[#E6ECF2] bg-white px-3 py-1 text-[10px] font-extrabold tracking-wider text-[#102D50] uppercase shadow-2xs">
-                09 Modules
+              <span className="rounded-full border border-[#0A1F44]/15 bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#0A1F44]">
+                09 MODULES
               </span>
             </div>
 
@@ -552,13 +545,13 @@ async function TravellerDashboardContent() {
 
                 const cardInner = (
                   <article
-                    className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white p-3.5 transition-all ${
+                    className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white p-3 transition-all ${
                       isAvailable
-                        ? "border-[#E6ECF2] shadow-2xs hover:-translate-y-0.5 hover:border-[#187B83]/50 hover:shadow-md"
-                        : "border-[#E6ECF2]/80 opacity-80"
+                        ? "border-[#0A1F44]/12 shadow-xs hover:-translate-y-0.5 hover:border-[#F5A623] hover:shadow-md"
+                        : "border-slate-200/80 opacity-85"
                     }`}
                   >
-                    <div className="relative aspect-[16/10] w-full overflow-hidden rounded-xl border border-[#E6ECF2] bg-slate-100">
+                    <div className="relative aspect-[16/10] w-full overflow-hidden rounded-xl border border-slate-100 bg-slate-100">
                       <img
                         src={imageUrl(service.image)}
                         alt={service.title}
@@ -569,13 +562,13 @@ async function TravellerDashboardContent() {
                     <div className="flex flex-1 flex-col justify-between pt-3.5">
                       <div>
                         <div className="mb-1.5 flex items-center justify-between gap-2">
-                          <span className="truncate text-[10px] font-extrabold tracking-wider text-[#718096] uppercase">
+                          <span className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">
                             {service.number} • {service.category}
                           </span>
                           <span
-                            className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold ${
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                               isAvailable
-                                ? "bg-[#E6F4F3] text-[#187B83]"
+                                ? "bg-[#0A1F44] text-[#F5A623]"
                                 : "bg-slate-100 text-slate-500"
                             }`}
                           >
@@ -584,33 +577,34 @@ async function TravellerDashboardContent() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <span aria-hidden="true" className="text-base">
-                            {service.emoji}
-                          </span>
+                          <span
+                            aria-hidden="true"
+                            className={`h-2 w-2 shrink-0 rounded-full ${service.accentDotClass}`}
+                          />
                           <h3
-                            className={`text-sm font-black tracking-tight transition-colors sm:text-base ${service.titleColorClass}`}
+                            className={`text-sm font-extrabold tracking-tight transition-colors ${service.titleColorClass}`}
                           >
                             {service.title}
                           </h3>
                         </div>
 
-                        <p className="mt-1.5 text-xs leading-relaxed text-[#718096]">
+                        <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
                           {service.description}
                         </p>
                       </div>
 
-                      <div className="mt-3.5 flex items-center justify-between border-t border-[#E6ECF2] pt-2.5">
+                      <div className="mt-3.5 flex items-center justify-between border-t border-slate-100 pt-2.5">
                         {isAvailable ? (
                           <>
-                            <span className="text-xs font-bold text-[#102D50] group-hover:text-[#187B83]">
+                            <span className="text-xs font-semibold text-[#0A1F44] group-hover:text-[#B47812]">
                               Launch module
                             </span>
-                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#F0F5F9] text-xs font-black text-[#102D50] transition-colors group-hover:bg-[#F5A623]">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0A1F44]/8 text-xs font-bold text-[#0A1F44] transition-colors group-hover:bg-[#F5A623]">
                               →
                             </span>
                           </>
                         ) : (
-                          <span className="text-[11px] font-semibold text-slate-400">
+                          <span className="text-[11px] font-medium text-slate-400">
                             Coming soon to your account
                           </span>
                         )}
@@ -623,7 +617,7 @@ async function TravellerDashboardContent() {
                   <Link
                     key={service.number}
                     href={service.href}
-                    className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#187B83]"
+                    className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A623]"
                   >
                     {cardInner}
                   </Link>
@@ -635,16 +629,16 @@ async function TravellerDashboardContent() {
           </section>
 
           {/* Footer */}
-          <footer className="flex flex-col items-center justify-between gap-2.5 rounded-2xl border border-[#E6ECF2] bg-white px-4 py-3.5 text-center text-xs text-[#718096] shadow-2xs sm:flex-row sm:text-left">
-            <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-              <span className="h-2 w-2 rounded-full bg-[#E98012]" />
-              <strong className="font-black text-[#102D50]">
-                🛡️ TRAVELLERS SAFETY COVERED
+          <footer className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-[#0A1F44]/10 bg-white px-4 py-3.5 text-xs text-slate-600 sm:flex-row">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#F5A623]" />
+              <strong className="font-bold text-[#0A1F44]">
+                TRAVELLERS SAFETY COVERED
               </strong>
-              <span className="hidden text-slate-300 sm:inline">|</span>
+              <span className="text-slate-300">|</span>
               <span>Your safety. Our priority.</span>
             </div>
-            <p className="text-[11px] text-[#718096]">
+            <p className="text-[11px] text-slate-500">
               © {new Date().getFullYear()} TSC. All rights reserved.
             </p>
           </footer>
@@ -654,53 +648,45 @@ async function TravellerDashboardContent() {
       {/* MOBILE BOTTOM APP DOCK */}
       <nav
         aria-label="Mobile quick actions"
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-[#F5A623]/25 bg-[#0A1F44]/98 py-2 text-center text-[10px] font-bold text-white backdrop-blur-md lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-[#F5A623]/25 bg-[#0A1F44] py-2 text-center text-[10px] font-semibold text-white lg:hidden"
       >
         <a
           href="#overview"
           className="flex flex-col items-center gap-0.5 text-[#F5A623]"
         >
-          <span aria-hidden="true" className="text-sm">
+          <span aria-hidden="true" className="text-xs">
             🏠
           </span>
           <span>Home</span>
         </a>
         <Link
           href="/dashboard/journeys"
-          className="flex flex-col items-center gap-0.5 text-slate-200 transition hover:text-[#F5A623]"
+          className="flex flex-col items-center gap-0.5 text-slate-200 hover:text-[#F5A623]"
         >
-          <span aria-hidden="true" className="text-sm">
+          <span aria-hidden="true" className="text-xs">
             🧭
           </span>
           <span>Journeys</span>
         </Link>
         <Link
           href="/dashboard/wallet"
-          className="flex flex-col items-center gap-0.5 text-slate-200 transition hover:text-[#F5A623]"
+          className="flex flex-col items-center gap-0.5 text-slate-200 hover:text-[#F5A623]"
         >
-          <span aria-hidden="true" className="text-sm">
-            👛
+          <span aria-hidden="true" className="text-xs">
+            💳
           </span>
           <span>Wallet</span>
         </Link>
         <Link
           href="/dashboard/emergency"
-          className="flex flex-col items-center gap-0.5 text-[#FBBF24] transition hover:text-white"
+          className="flex flex-col items-center gap-0.5 text-[#FBBF24]"
         >
-          <span aria-hidden="true" className="text-sm">
+          <span aria-hidden="true" className="text-xs">
             🚨
           </span>
           <span>Emergency</span>
         </Link>
       </nav>
     </div>
-  );
-}
-
-export default function TravellerDashboard() {
-  return (
-    <Suspense fallback={<DashboardSkeleton />}>
-      <TravellerDashboardContent />
-    </Suspense>
   );
 }
