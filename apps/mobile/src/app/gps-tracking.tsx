@@ -36,19 +36,25 @@ type LocationUpdate = {
   recorded_at: string;
 };
 
-const NAVY = '#071D49';
-const ORANGE = '#F28C28';
-const PAGE = '#F4F6F9';
-const INK = '#172536';
-const MUTED = '#687789';
-const BORDER = '#E2E7EE';
-const GREEN = '#16845B';
+const COLORS = {
+  navy: '#071D49',
+  navyMid: '#13386B',
+  orange: '#F28C28',
+  orangeSoft: '#FFF2E5',
+  page: '#F4F6F9',
+  white: '#FFFFFF',
+  ink: '#172536',
+  muted: '#687789',
+  border: '#E2E7EE',
+  green: '#16845B',
+  greenSoft: '#E8F5EE',
+  amberSoft: '#FFFBEB',
+};
 
 function formatTime(value: string | null) {
   if (!value) return 'Not available';
 
   const date = new Date(value);
-
   if (Number.isNaN(date.getTime())) return 'Not available';
 
   return date.toLocaleString([], {
@@ -68,81 +74,93 @@ function formatDistance(value: number | null) {
 export default function GpsTrackingScreen() {
   const router = useRouter();
 
-  const [journey, setJourney] = useState<Journey | null>(null);
+  const [journeys, setJourneys] = useState<Journey[]>([]);
+  const [selectedJourneyId, setSelectedJourneyId] = useState<string | null>(null);
   const [updates, setUpdates] = useState<LocationUpdate[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [trackingMessage, setTrackingMessage] = useState('');
 
-  const loadTrackingData = useCallback(async (quiet = false) => {
-    if (quiet) setRefreshing(true);
-    else setLoading(true);
-
-    setError('');
-
-    try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError || !session) {
-        router.replace('/login');
-        return;
-      }
-
-      const { data: journeyData, error: journeyError } = await supabase
-        .from('journeys')
-        .select(
-          'id, traveller_id, journey_name, origin_name, destination_name, status, location_sharing_enabled, started_at'
-        )
-        .eq('traveller_id', session.user.id)
-        .order('departure_at', { ascending: false });
-
-      if (journeyError) throw journeyError;
-
-      const availableJourneys = (journeyData ?? []) as Journey[];
-
-      const selectedJourney =
-        availableJourneys.find(
-          (item) => item.status === 'active' && item.location_sharing_enabled
-        ) ??
-        availableJourneys.find((item) => item.status === 'active') ??
-        availableJourneys.find((item) => item.location_sharing_enabled) ??
-        availableJourneys[0] ??
-        null;
-
-      setJourney(selectedJourney);
-
-      if (!selectedJourney) {
-        setUpdates([]);
-        return;
-      }
-
-      const { data: locationData, error: locationError } = await supabase
-        .from('journey_location_updates')
-        .select(
-          'id, latitude, longitude, accuracy_meters, speed_meters_per_second, heading_degrees, recorded_at'
-        )
-        .eq('journey_id', selectedJourney.id)
-        .eq('traveller_id', session.user.id)
-        .order('recorded_at', { ascending: false })
-        .limit(100);
-
-      if (locationError) throw locationError;
-
-      setUpdates(
-        ((locationData ?? []) as LocationUpdate[]).reverse()
-      );
-    } catch (err) {
-      console.error('GPS tracking data could not be loaded:', err);
-      setError('We could not load your GPS tracking information. Please try again.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const goToLogin = useCallback(() => {
+    router.replace('/login' as never);
   }, [router]);
+
+  const loadTrackingData = useCallback(
+    async (quiet = false) => {
+      if (quiet) setRefreshing(true);
+      else setLoading(true);
+
+      setError('');
+
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError || !session) {
+          goToLogin();
+          return;
+        }
+
+        const { data: journeyData, error: journeyError } = await supabase
+          .from('journeys')
+          .select(
+            'id, traveller_id, journey_name, origin_name, destination_name, status, location_sharing_enabled, started_at'
+          )
+          .eq('traveller_id', session.user.id)
+          .order('departure_at', { ascending: false });
+
+        if (journeyError) throw journeyError;
+
+        const availableJourneys = (journeyData ?? []) as Journey[];
+        setJourneys(availableJourneys);
+
+        const activeJourneys = availableJourneys.filter(
+          (item) => item.status === 'active'
+        );
+
+        const chosen =
+          availableJourneys.find((item) => item.id === selectedJourneyId) ??
+          activeJourneys.find((item) => item.location_sharing_enabled) ??
+          activeJourneys[0] ??
+          availableJourneys.find((item) => item.location_sharing_enabled) ??
+          availableJourneys[0] ??
+          null;
+
+        setSelectedJourneyId(chosen?.id ?? null);
+
+        if (!chosen) {
+          setUpdates([]);
+          return;
+        }
+
+        const { data: locationData, error: locationError } = await supabase
+          .from('journey_location_updates')
+          .select(
+            'id, latitude, longitude, accuracy_meters, speed_meters_per_second, heading_degrees, recorded_at'
+          )
+          .eq('journey_id', chosen.id)
+          .eq('traveller_id', session.user.id)
+          .order('recorded_at', { ascending: false })
+          .limit(100);
+
+        if (locationError) throw locationError;
+
+        setUpdates(((locationData ?? []) as LocationUpdate[]).reverse());
+      } catch (err) {
+        console.error('GPS tracking data could not be loaded:', err);
+        setError(
+          'We could not load your GPS tracking information. Please try again.'
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [goToLogin, selectedJourneyId]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -156,8 +174,14 @@ export default function GpsTrackingScreen() {
     }, [loadTrackingData])
   );
 
-  // Resume foreground GPS capture on this screen only when the traveller
-  // has already consented and the selected journey is active.
+  const journey =
+    journeys.find((item) => item.id === selectedJourneyId) ?? null;
+
+  const activeJourneys = journeys.filter((item) => item.status === 'active');
+  const sharingCount = activeJourneys.filter(
+    (item) => item.location_sharing_enabled
+  ).length;
+
   useEffect(() => {
     if (
       !journey ||
@@ -226,11 +250,15 @@ export default function GpsTrackingScreen() {
               });
 
             if (insertError) {
-              console.warn('GPS location update was not saved:', insertError.message);
+              console.warn(
+                'GPS location update was not saved:',
+                insertError.message
+              );
             } else if (mounted) {
               setTrackingMessage(
                 'Your consented GPS location is being updated while this screen is open.'
               );
+              void loadTrackingData(true);
             }
           }
         );
@@ -268,6 +296,7 @@ export default function GpsTrackingScreen() {
     journey?.id,
     journey?.status,
     journey?.location_sharing_enabled,
+    loadTrackingData,
   ]);
 
   const latest = updates.length ? updates[updates.length - 1] : null;
@@ -294,30 +323,29 @@ export default function GpsTrackingScreen() {
     return (
       <SafeAreaView style={styles.loadingScreen}>
         <StatusBar barStyle="dark-content" />
-        <ActivityIndicator size="large" color={ORANGE} />
+        <ActivityIndicator size="large" color={COLORS.orange} />
         <Text style={styles.loadingText}>Loading GPS tracking...</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" />
 
+      {/* Top Header */}
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
           style={styles.backButton}
           accessibilityLabel="Go back"
         >
-          <Ionicons name="arrow-back" size={21} color={NAVY} />
+          <Ionicons name="arrow-back" size={20} color={COLORS.navy} />
         </Pressable>
 
         <View style={styles.headerText}>
+          <Text style={styles.headerEyebrow}>📍 TRAVELLER SAFETY MONITORING</Text>
           <Text style={styles.headerTitle}>GPS Tracking</Text>
-          <Text style={styles.headerSubtitle}>
-            Your journey location and movement
-          </Text>
         </View>
 
         <Pressable
@@ -327,9 +355,9 @@ export default function GpsTrackingScreen() {
           accessibilityLabel="Refresh GPS tracking"
         >
           {refreshing ? (
-            <ActivityIndicator size="small" color={ORANGE} />
+            <ActivityIndicator size="small" color={COLORS.orange} />
           ) : (
-            <Ionicons name="refresh" size={20} color={NAVY} />
+            <Ionicons name="refresh" size={20} color={COLORS.navy} />
           )}
         </Pressable>
       </View>
@@ -338,9 +366,55 @@ export default function GpsTrackingScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* Hero Banner */}
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTitle}>🛰️ Live route & GPS status</Text>
+          <Text style={styles.heroSubtitle}>
+            Manage location sharing and view recorded GPS positions for your active journeys.
+          </Text>
+
+          <View style={styles.heroActions}>
+            <Pressable
+              style={styles.heroLightBtn}
+              onPress={() => router.push('/journeys' as never)}
+            >
+              <Text style={styles.heroLightBtnText}>🗺️ Manage journeys</Text>
+            </Pressable>
+            <Pressable
+              style={styles.heroOrangeBtn}
+              onPress={() => void loadTrackingData(true)}
+              disabled={refreshing}
+            >
+              <Text style={styles.heroOrangeBtnText}>
+                {refreshing ? 'Refreshing…' : '↻ Refresh'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Summary KPI Strip */}
+        <View style={styles.kpiRow}>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>ACTIVE</Text>
+            <Text style={styles.kpiValue}>{activeJourneys.length}</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>SHARING ON</Text>
+            <Text style={[styles.kpiValue, { color: COLORS.green }]}>
+              {sharingCount}
+            </Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>SHARING OFF</Text>
+            <Text style={styles.kpiValue}>
+              {Math.max(0, activeJourneys.length - sharingCount)}
+            </Text>
+          </View>
+        </View>
+
         {!!error && (
           <View style={styles.errorCard}>
-            <Ionicons name="alert-circle-outline" size={19} color="#B52D2D" />
+            <Ionicons name="alert-circle-outline" size={19} color="#B45309" />
             <Text style={styles.errorText}>{error}</Text>
             <Pressable onPress={() => void loadTrackingData()}>
               <Text style={styles.retryText}>Retry</Text>
@@ -351,32 +425,67 @@ export default function GpsTrackingScreen() {
         {!journey ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIcon}>
-              <Ionicons name="map-outline" size={34} color={ORANGE} />
+              <Ionicons name="map-outline" size={34} color={COLORS.orange} />
             </View>
-            <Text style={styles.emptyTitle}>No journey to display</Text>
+            <Text style={styles.emptyTitle}>No active journeys to display</Text>
             <Text style={styles.emptyDescription}>
-              Create a journey in Journey Management, start it, and enable GPS
+              Plan a journey in Journey Management, start it, and enable GPS
               sharing to see your location here.
             </Text>
             <Pressable
               style={styles.primaryButton}
-              onPress={() => router.push('/journeys')}
+              onPress={() => router.push('/journeys' as never)}
             >
-              <Ionicons name="navigate-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.primaryButtonText}>Open Journey Management</Text>
+              <Ionicons name="navigate-outline" size={18} color={COLORS.white} />
+              <Text style={styles.primaryButtonText}>Open journey management</Text>
             </Pressable>
           </View>
         ) : (
           <>
+            {/* Journey Switcher when multiple journeys exist */}
+            {journeys.length > 1 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.journeyChips}
+              >
+                {journeys.map((item) => {
+                  const selected = item.id === journey.id;
+                  return (
+                    <Pressable
+                      key={item.id}
+                      onPress={() => setSelectedJourneyId(item.id)}
+                      style={[
+                        styles.journeyChip,
+                        selected && styles.journeyChipSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.journeyChipText,
+                          selected && styles.journeyChipTextSelected,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {item.status === 'active' ? '🟢 ' : '• '}
+                        {item.journey_name || 'Untitled journey'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* Selected Journey Card */}
             <View style={styles.journeyCard}>
               <View style={styles.journeyTopRow}>
                 <View style={styles.journeyIcon}>
-                  <Ionicons name="airplane-outline" size={21} color={ORANGE} />
+                  <Ionicons name="airplane-outline" size={21} color={COLORS.orange} />
                 </View>
                 <View style={styles.journeyTitleWrap}>
                   <Text style={styles.journeyLabel}>SELECTED JOURNEY</Text>
                   <Text style={styles.journeyTitle} numberOfLines={1}>
-                    {journey.journey_name}
+                    {journey.journey_name || 'Untitled journey'}
                   </Text>
                 </View>
                 <View
@@ -402,14 +511,14 @@ export default function GpsTrackingScreen() {
 
               <View style={styles.routeRow}>
                 <View style={styles.routePoint}>
-                  <Ionicons name="radio-button-on" size={13} color={GREEN} />
+                  <Ionicons name="radio-button-on" size={13} color={COLORS.green} />
                   <Text style={styles.routeText} numberOfLines={1}>
                     {journey.origin_name}
                   </Text>
                 </View>
-                <Ionicons name="arrow-forward" size={15} color={MUTED} />
+                <Ionicons name="arrow-forward" size={15} color={COLORS.muted} />
                 <View style={styles.routePoint}>
-                  <Ionicons name="location" size={14} color={ORANGE} />
+                  <Ionicons name="location" size={14} color={COLORS.orange} />
                   <Text style={styles.routeText} numberOfLines={1}>
                     {journey.destination_name}
                   </Text>
@@ -423,24 +532,27 @@ export default function GpsTrackingScreen() {
                       styles.sharingDot,
                       {
                         backgroundColor: journey.location_sharing_enabled
-                          ? GREEN
+                          ? COLORS.green
                           : '#9AA5B1',
                       },
                     ]}
                   />
                   <Text style={styles.sharingText}>
-                    GPS sharing {journey.location_sharing_enabled ? 'ON' : 'OFF'}
+                    {journey.location_sharing_enabled
+                      ? 'Location sharing is enabled for this journey.'
+                      : 'Location sharing is currently turned off.'}
                   </Text>
                 </View>
 
-                <Pressable onPress={() => router.push('/journeys')}>
+                <Pressable onPress={() => router.push('/journeys' as never)}>
                   <Text style={styles.manageLink}>Manage</Text>
                 </Pressable>
               </View>
             </View>
 
+            {/* Location Map */}
             <View style={styles.sectionHeading}>
-              <Text style={styles.sectionTitle}>Location map</Text>
+              <Text style={styles.sectionTitle}>🗺️ Location map</Text>
               <Text style={styles.sectionHint}>
                 {latest ? 'LAST RECORDED POSITION' : 'AWAITING LOCATION'}
               </Text>
@@ -461,7 +573,7 @@ export default function GpsTrackingScreen() {
                   {coordinates.length > 1 && (
                     <Polyline
                       coordinates={coordinates}
-                      strokeColor={ORANGE}
+                      strokeColor={COLORS.orange}
                       strokeWidth={4}
                     />
                   )}
@@ -473,12 +585,12 @@ export default function GpsTrackingScreen() {
                     }}
                     title="Your last recorded location"
                     description={`Updated ${formatTime(latest.recorded_at)}`}
-                    pinColor={ORANGE}
+                    pinColor={COLORS.orange}
                   />
                 </MapView>
               ) : (
                 <View style={styles.mapEmpty}>
-                  <Ionicons name="map-outline" size={42} color="#9AA5B1" />
+                  <Ionicons name="map-outline" size={40} color="#9AA5B1" />
                   <Text style={styles.mapEmptyTitle}>
                     {journey.location_sharing_enabled
                       ? 'Waiting for your first GPS position'
@@ -491,11 +603,15 @@ export default function GpsTrackingScreen() {
                   </Text>
                   <Pressable
                     style={styles.mapAction}
-                    onPress={() => router.push('/journeys')}
+                    onPress={() =>
+                      journey.location_sharing_enabled
+                        ? void loadTrackingData(true)
+                        : router.push('/journeys' as never)
+                    }
                   >
                     <Text style={styles.mapActionText}>
                       {journey.location_sharing_enabled
-                        ? 'Refresh location'
+                        ? '↻ Refresh location'
                         : 'Open Journey Management'}
                     </Text>
                   </Pressable>
@@ -503,8 +619,9 @@ export default function GpsTrackingScreen() {
               )}
             </View>
 
+            {/* Location Information */}
             <View style={styles.sectionHeading}>
-              <Text style={styles.sectionTitle}>Location information</Text>
+              <Text style={styles.sectionTitle}>📡 Location information</Text>
               <Text style={styles.sectionHint}>
                 {updates.length} RECORDED POINT{updates.length === 1 ? '' : 'S'}
               </Text>
@@ -513,7 +630,7 @@ export default function GpsTrackingScreen() {
             <View style={styles.infoCard}>
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
-                  <Ionicons name="time-outline" size={19} color={ORANGE} />
+                  <Ionicons name="time-outline" size={19} color={COLORS.orange} />
                 </View>
                 <View style={styles.infoText}>
                   <Text style={styles.infoLabel}>Last location update</Text>
@@ -544,12 +661,14 @@ export default function GpsTrackingScreen() {
 
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
-                  <Ionicons name="locate-outline" size={19} color={ORANGE} />
+                  <Ionicons name="locate-outline" size={19} color={COLORS.orange} />
                 </View>
                 <View style={styles.infoText}>
-                  <Text style={styles.infoLabel}>GPS accuracy</Text>
+                  <Text style={styles.infoLabel}>GPS accuracy & coordinates</Text>
                   <Text style={styles.infoValue}>
-                    {latest ? formatDistance(latest.accuracy_meters) : 'Not available'}
+                    {latest
+                      ? `${formatDistance(latest.accuracy_meters)} · ${latest.latitude.toFixed(5)}, ${latest.longitude.toFixed(5)}`
+                      : 'Not available'}
                   </Text>
                 </View>
               </View>
@@ -558,7 +677,7 @@ export default function GpsTrackingScreen() {
 
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
-                  <Ionicons name="trail-sign-outline" size={19} color={ORANGE} />
+                  <Ionicons name="trail-sign-outline" size={19} color={COLORS.orange} />
                 </View>
                 <View style={styles.infoText}>
                   <Text style={styles.infoLabel}>Recorded route points</Text>
@@ -572,7 +691,7 @@ export default function GpsTrackingScreen() {
                 <Ionicons
                   name="information-circle-outline"
                   size={19}
-                  color={GREEN}
+                  color={COLORS.green}
                 />
                 <Text style={styles.trackingNoticeText}>{trackingMessage}</Text>
               </View>
@@ -580,9 +699,9 @@ export default function GpsTrackingScreen() {
 
             <Pressable
               style={styles.secondaryButton}
-              onPress={() => router.push('/journeys')}
+              onPress={() => router.push('/journeys' as never)}
             >
-              <Ionicons name="briefcase-outline" size={18} color={NAVY} />
+              <Ionicons name="briefcase-outline" size={18} color={COLORS.navy} />
               <Text style={styles.secondaryButtonText}>
                 View journey details and GPS consent
               </Text>
@@ -595,67 +714,90 @@ export default function GpsTrackingScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: PAGE,
-  },
+  screen: { flex: 1, backgroundColor: COLORS.page },
   loadingScreen: {
     flex: 1,
-    backgroundColor: PAGE,
+    backgroundColor: COLORS.page,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  loadingText: {
-    marginTop: 12,
-    color: MUTED,
-    fontSize: 12,
-  },
+  loadingText: { marginTop: 12, color: COLORS.muted, fontSize: 12 },
   header: {
-    minHeight: 70,
-    paddingHorizontal: 17,
+    minHeight: 68,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.white,
     borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+    borderBottomColor: COLORS.border,
   },
   backButton: {
-    width: 39,
-    height: 39,
+    width: 38,
+    height: 38,
     borderRadius: 12,
     backgroundColor: '#F0F3F7',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerText: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  headerTitle: {
-    color: NAVY,
-    fontSize: 17,
+  headerText: { flex: 1, marginLeft: 12 },
+  headerEyebrow: {
+    color: COLORS.orange,
+    fontSize: 9,
     fontWeight: '800',
+    letterSpacing: 0.9,
   },
-  headerSubtitle: {
-    color: MUTED,
-    fontSize: 10,
-    marginTop: 3,
-  },
+  headerTitle: { color: COLORS.navy, fontSize: 17, fontWeight: '800', marginTop: 2 },
   refreshButton: {
-    width: 39,
-    height: 39,
+    width: 38,
+    height: 38,
     borderRadius: 12,
-    backgroundColor: '#FFF2E5',
+    backgroundColor: COLORS.orangeSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  content: {
+  content: { padding: 16, paddingBottom: 36 },
+  heroCard: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 18,
     padding: 16,
-    paddingBottom: 35,
+    marginBottom: 12,
   },
+  heroTitle: { color: COLORS.white, fontSize: 18, fontWeight: '800' },
+  heroSubtitle: { color: '#CBD5E1', fontSize: 12, lineHeight: 18, marginTop: 5 },
+  heroActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  heroLightBtn: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  heroLightBtnText: { color: COLORS.white, fontSize: 12, fontWeight: '700' },
+  heroOrangeBtn: {
+    minHeight: 40,
+    borderRadius: 10,
+    backgroundColor: COLORS.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  heroOrangeBtnText: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
+  kpiRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  kpiCard: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 12,
+  },
+  kpiLabel: { color: COLORS.muted, fontSize: 9, fontWeight: '800', letterSpacing: 0.6 },
+  kpiValue: { color: COLORS.navy, fontSize: 20, fontWeight: '900', marginTop: 4 },
   errorCard: {
-    backgroundColor: '#FFF3F3',
-    borderColor: '#F0D5D5',
+    backgroundColor: COLORS.amberSoft,
+    borderColor: '#FCD34D',
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
@@ -664,318 +806,199 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 13,
   },
-  errorText: {
-    flex: 1,
-    color: '#A12B2B',
-    fontSize: 11,
-  },
-  retryText: {
-    color: '#A12B2B',
-    fontSize: 11,
-    fontWeight: '800',
-  },
+  errorText: { flex: 1, color: '#78350F', fontSize: 11 },
+  retryText: { color: COLORS.navy, fontSize: 11, fontWeight: '800' },
   emptyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 17,
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: BORDER,
-    padding: 25,
+    borderColor: COLORS.border,
+    padding: 24,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 8,
   },
   emptyIcon: {
-    width: 68,
-    height: 68,
-    borderRadius: 22,
-    backgroundColor: '#FFF2E5',
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: COLORS.orangeSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 15,
+    marginBottom: 14,
   },
-  emptyTitle: {
-    color: NAVY,
-    fontSize: 16,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
+  emptyTitle: { color: COLORS.navy, fontSize: 16, fontWeight: '800', textAlign: 'center' },
   emptyDescription: {
-    color: MUTED,
-    fontSize: 11,
+    color: COLORS.muted,
+    fontSize: 12,
     lineHeight: 18,
     textAlign: 'center',
-    marginTop: 9,
+    marginTop: 8,
   },
   primaryButton: {
-    minHeight: 45,
-    paddingHorizontal: 17,
-    borderRadius: 11,
-    backgroundColor: NAVY,
+    minHeight: 46,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    backgroundColor: COLORS.orange,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 20,
+    marginTop: 18,
   },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  journeyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
+  primaryButtonText: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
+  journeyChips: { gap: 8, marginBottom: 12 },
+  journeyChip: {
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: COLORS.border,
+    maxWidth: 220,
+  },
+  journeyChipSelected: {
+    backgroundColor: COLORS.navy,
+    borderColor: COLORS.navy,
+  },
+  journeyChipText: { color: COLORS.ink, fontSize: 11, fontWeight: '700' },
+  journeyChipTextSelected: { color: COLORS.white },
+  journeyCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     padding: 14,
   },
-  journeyTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
+  journeyTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   journeyIcon: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#FFF2E5',
+    backgroundColor: COLORS.orangeSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  journeyTitleWrap: {
-    flex: 1,
-  },
-  journeyLabel: {
-    color: MUTED,
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.7,
-  },
-  journeyTitle: {
-    color: NAVY,
-    fontSize: 13,
-    fontWeight: '800',
-    marginTop: 3,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 7,
-  },
-  activeBadge: {
-    backgroundColor: '#E8F5EE',
-  },
-  otherBadge: {
-    backgroundColor: '#EDF1F5',
-  },
-  statusBadgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-  },
-  activeBadgeText: {
-    color: GREEN,
-  },
-  otherBadgeText: {
-    color: MUTED,
-  },
-  routeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 17,
-  },
-  routePoint: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  routeText: {
-    flex: 1,
-    color: INK,
-    fontSize: 10,
-    fontWeight: '600',
-  },
+  journeyTitleWrap: { flex: 1 },
+  journeyLabel: { color: COLORS.muted, fontSize: 8, fontWeight: '800', letterSpacing: 0.7 },
+  journeyTitle: { color: COLORS.navy, fontSize: 14, fontWeight: '800', marginTop: 2 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 7 },
+  activeBadge: { backgroundColor: COLORS.greenSoft },
+  otherBadge: { backgroundColor: '#EDF1F5' },
+  statusBadgeText: { fontSize: 8, fontWeight: '800' },
+  activeBadgeText: { color: COLORS.green },
+  otherBadgeText: { color: COLORS.muted },
+  routeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 15 },
+  routePoint: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  routeText: { flex: 1, color: COLORS.ink, fontSize: 11, fontWeight: '600' },
   sharingRow: {
     borderTopWidth: 1,
-    borderTopColor: BORDER,
-    marginTop: 14,
-    paddingTop: 12,
+    borderTopColor: COLORS.border,
+    marginTop: 13,
+    paddingTop: 11,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
-  sharingLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  sharingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  sharingText: {
-    color: INK,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  manageLink: {
-    color: ORANGE,
-    fontSize: 10,
-    fontWeight: '800',
-  },
+  sharingLabel: { flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1 },
+  sharingDot: { width: 8, height: 8, borderRadius: 4 },
+  sharingText: { color: COLORS.ink, fontSize: 11, fontWeight: '700', flex: 1 },
+  manageLink: { color: COLORS.orange, fontSize: 11, fontWeight: '800' },
   sectionHeading: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 21,
-    marginBottom: 10,
+    marginTop: 20,
+    marginBottom: 9,
   },
-  sectionTitle: {
-    color: NAVY,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  sectionHint: {
-    color: MUTED,
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
+  sectionTitle: { color: COLORS.navy, fontSize: 14, fontWeight: '800' },
+  sectionHint: { color: COLORS.muted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   mapCard: {
-    height: 310,
-    borderRadius: 15,
+    height: 300,
+    borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#E8EDF2',
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: COLORS.border,
   },
-  map: {
-    flex: 1,
-  },
+  map: { flex: 1 },
   mapEmpty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 25,
+    paddingHorizontal: 24,
   },
   mapEmptyTitle: {
-    color: NAVY,
+    color: COLORS.navy,
     fontSize: 13,
     fontWeight: '800',
     textAlign: 'center',
-    marginTop: 12,
+    marginTop: 11,
   },
   mapEmptyText: {
-    color: MUTED,
-    fontSize: 10,
+    color: COLORS.muted,
+    fontSize: 11,
     lineHeight: 16,
     textAlign: 'center',
-    marginTop: 7,
+    marginTop: 6,
   },
   mapAction: {
-    marginTop: 15,
+    marginTop: 14,
     paddingHorizontal: 15,
     paddingVertical: 10,
-    borderRadius: 9,
-    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: COLORS.border,
   },
-  mapActionText: {
-    color: NAVY,
-    fontSize: 10,
-    fontWeight: '800',
-  },
+  mapActionText: { color: COLORS.navy, fontSize: 11, fontWeight: '800' },
   infoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: BORDER,
-    paddingHorizontal: 13,
+    borderColor: COLORS.border,
+    paddingHorizontal: 14,
   },
-  infoRow: {
-    minHeight: 65,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-  },
+  infoRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 11 },
   infoIcon: {
     width: 36,
     height: 36,
     borderRadius: 11,
-    backgroundColor: '#FFF2E5',
+    backgroundColor: COLORS.orangeSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  infoText: {
-    flex: 1,
-  },
-  infoLabel: {
-    color: MUTED,
-    fontSize: 9,
-  },
-  infoValue: {
-    color: NAVY,
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  infoDivider: {
-    height: 1,
-    backgroundColor: BORDER,
-  },
-  freshnessBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 7,
-  },
-  freshBadge: {
-    backgroundColor: '#E8F5EE',
-  },
-  staleBadge: {
-    backgroundColor: '#FFF2E5',
-  },
-  freshnessText: {
-    fontSize: 8,
-    fontWeight: '800',
-  },
-  freshText: {
-    color: GREEN,
-  },
-  staleText: {
-    color: '#B56A17',
-  },
+  infoText: { flex: 1 },
+  infoLabel: { color: COLORS.muted, fontSize: 10 },
+  infoValue: { color: COLORS.navy, fontSize: 12, fontWeight: '700', marginTop: 3 },
+  infoDivider: { height: 1, backgroundColor: COLORS.border },
+  freshnessBadge: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 7 },
+  freshBadge: { backgroundColor: COLORS.greenSoft },
+  staleBadge: { backgroundColor: COLORS.orangeSoft },
+  freshnessText: { fontSize: 8, fontWeight: '800' },
+  freshText: { color: COLORS.green },
+  staleText: { color: '#B56A17' },
   trackingNotice: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
     marginTop: 14,
     padding: 12,
-    borderRadius: 11,
-    backgroundColor: '#EAF5EF',
+    borderRadius: 12,
+    backgroundColor: COLORS.greenSoft,
   },
-  trackingNoticeText: {
-    flex: 1,
-    color: '#286B4E',
-    fontSize: 10,
-    lineHeight: 16,
-  },
+  trackingNoticeText: { flex: 1, color: '#286B4E', fontSize: 11, lineHeight: 16 },
   secondaryButton: {
-    minHeight: 45,
+    minHeight: 46,
     borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 11,
-    marginTop: 16,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    marginTop: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  secondaryButtonText: {
-    color: NAVY,
-    fontSize: 10,
-    fontWeight: '800',
-  },
+  secondaryButtonText: { color: COLORS.navy, fontSize: 12, fontWeight: '800' },
 });

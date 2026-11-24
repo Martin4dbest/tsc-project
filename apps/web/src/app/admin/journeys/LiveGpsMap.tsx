@@ -1,149 +1,143 @@
 "use client";
 
-import { useEffect } from "react";
-import {
-  CircleMarker,
-  MapContainer,
-  Marker,
-  Polyline,
-  Popup,
-  TileLayer,
-  useMap,
-} from "react-leaflet";
+import { useEffect, useRef } from "react";
 import L from "leaflet";
-import type { LiveGpsJourneyRecord } from "./journey-actions";
+import "leaflet/dist/leaflet.css";
 
-type Props = {
-  journey: LiveGpsJourneyRecord;
-};
-
-function MapFocus({ latitude, longitude }: {
+export type LiveGpsPoint = {
+  id?: string;
   latitude: number;
   longitude: number;
-}) {
-  const map = useMap();
+  recorded_at?: string;
+  accuracy_meters?: number | null;
+};
+
+type LiveGpsMapProps = {
+  points?: LiveGpsPoint[];
+  latitude?: number | null;
+  longitude?: number | null;
+  className?: string;
+};
+
+export default function LiveGpsMap({
+  points = [],
+  latitude = null,
+  longitude = null,
+  className = "live-gps-leaflet-map",
+}: LiveGpsMapProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const layerGroupRef = useRef<L.LayerGroup | null>(null);
+
+  const normalizedPoints: LiveGpsPoint[] =
+    points.length > 0
+      ? points.filter(
+          (p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude)
+        )
+      : latitude !== null &&
+        longitude !== null &&
+        Number.isFinite(latitude) &&
+        Number.isFinite(longitude)
+      ? [{ latitude, longitude }]
+      : [];
 
   useEffect(() => {
-    map.flyTo([latitude, longitude], Math.max(map.getZoom(), 13), {
-      duration: 0.8,
+    const el = containerRef.current;
+    if (!el || typeof window === "undefined") return;
+
+    // Prevent "Map container is being reused by another instance"
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+    }
+
+    const containerWithId = el as HTMLDivElement & { _leaflet_id?: number };
+    if (containerWithId._leaflet_id) {
+      delete containerWithId._leaflet_id;
+    }
+
+    const initialCenter: [number, number] =
+      normalizedPoints.length > 0
+        ? [
+            normalizedPoints[normalizedPoints.length - 1].latitude,
+            normalizedPoints[normalizedPoints.length - 1].longitude,
+          ]
+        : [6.5244, 3.3792];
+
+    const map = L.map(el, {
+      center: initialCenter,
+      zoom: 14,
+      zoomControl: true,
     });
-  }, [map, latitude, longitude]);
 
-  return null;
-}
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(map);
 
-function formatRecordedAt(value: string) {
-  const date = new Date(value);
+    const group = L.layerGroup().addTo(map);
 
-  if (Number.isNaN(date.getTime())) return "Unknown";
+    mapRef.current = map;
+    layerGroupRef.current = group;
 
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
+    return () => {
+      group.clearLayers();
+      map.remove();
+      mapRef.current = null;
+      layerGroupRef.current = null;
+    };
+    // Initialize map instance once per mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-export default function LiveGpsMap({ journey }: Props) {
-  const locations = journey.locations.filter(
-    (point) =>
-      Number.isFinite(point.latitude) &&
-      Number.isFinite(point.longitude) &&
-      point.latitude >= -90 &&
-      point.latitude <= 90 &&
-      point.longitude >= -180 &&
-      point.longitude <= 180
-  );
+  useEffect(() => {
+    const map = mapRef.current;
+    const group = layerGroupRef.current;
+    if (!map || !group) return;
 
-  if (locations.length === 0) {
-    return (
-      <div className="live-gps-map-loading">
-        No valid GPS coordinates are available for this journey.
-      </div>
-    );
-  }
+    group.clearLayers();
 
-  const latest = locations[locations.length - 1];
-  const route: [number, number][] = locations.map((point) => [
-    point.latitude,
-    point.longitude,
-  ]);
+    if (normalizedPoints.length === 0) return;
 
-  const currentIcon = L.divIcon({
-    className: "tsc-gps-marker-shell",
-    html: '<span class="tsc-gps-marker"><i></i></span>',
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  });
+    const latLngs: L.LatLngExpression[] = normalizedPoints.map((pt) => [
+      pt.latitude,
+      pt.longitude,
+    ]);
+
+    if (latLngs.length > 1) {
+      L.polyline(latLngs, {
+        color: "#F28C28",
+        weight: 4,
+      }).addTo(group);
+    }
+
+    const latest = normalizedPoints[normalizedPoints.length - 1];
+    L.circleMarker([latest.latitude, latest.longitude], {
+      radius: 8,
+      color: "#071D49",
+      weight: 3,
+      fillColor: "#F28C28",
+      fillOpacity: 1,
+    })
+      .bindPopup(
+        latest.recorded_at
+          ? `Last update: ${new Date(latest.recorded_at).toLocaleString()}`
+          : "Current location"
+      )
+      .addTo(group);
+
+    if (latLngs.length > 1) {
+      map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24], maxZoom: 16 });
+    } else {
+      map.setView([latest.latitude, latest.longitude], 15);
+    }
+  }, [normalizedPoints]);
 
   return (
-    <div className="live-gps-map-canvas">
-      <MapContainer
-        key={journey.id}
-        center={[latest.latitude, latest.longitude]}
-        zoom={13}
-        scrollWheelZoom
-        className="live-gps-leaflet-map"
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
-        <MapFocus
-          latitude={latest.latitude}
-          longitude={latest.longitude}
-        />
-
-        {route.length > 1 && (
-          <Polyline
-            positions={route}
-            pathOptions={{
-              color: "#e87924",
-              weight: 5,
-              opacity: 0.82,
-              lineCap: "round",
-              lineJoin: "round",
-            }}
-          />
-        )}
-
-        {locations.slice(0, -1).map((point, index) => (
-          <CircleMarker
-            key={point.id}
-            center={[point.latitude, point.longitude]}
-            radius={5}
-            pathOptions={{
-              color: "#ffffff",
-              weight: 2,
-              fillColor: "#173b67",
-              fillOpacity: 0.9,
-            }}
-          >
-            <Popup>
-              <strong>Recorded position</strong>
-              <br />
-              {formatRecordedAt(point.recorded_at)}
-              <br />
-              Point {index + 1} of {locations.length}
-            </Popup>
-          </CircleMarker>
-        ))}
-
-        <Marker
-          position={[latest.latitude, latest.longitude]}
-          icon={currentIcon}
-        >
-          <Popup>
-            <strong>{journey.traveller_name}</strong>
-            <br />
-            {journey.journey_name || "Active journey"}
-            <br />
-            Latest recorded position
-            <br />
-            {formatRecordedAt(latest.recorded_at)}
-          </Popup>
-        </Marker>
-      </MapContainer>
-    </div>
+    <div
+      ref={containerRef}
+      className={className}
+      style={{ width: "100%", height: "100%", minHeight: 260 }}
+    />
   );
 }
