@@ -69,12 +69,12 @@ const emptyContact: ContactForm = {
 };
 
 const inputClass =
-  "w-full min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-orange-400 focus:ring-4 focus:ring-orange-100";
+  "w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100";
 
 const fieldClass = "grid gap-2 text-sm font-semibold text-slate-700";
 
 const secondaryButton =
-  "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-orange-300 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:border-orange-300 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50";
 
 function SectionHeading({
   number,
@@ -88,8 +88,8 @@ function SectionHeading({
   description: string;
 }) {
   return (
-    <div className="mb-6 flex items-start gap-3">
-      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-orange-50 text-2xl">
+    <div className="mb-6 flex items-start gap-3.5">
+      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#FFF4E8] text-2xl">
         {icon}
       </div>
       <div className="min-w-0">
@@ -99,9 +99,7 @@ function SectionHeading({
         <h2 className="mt-1 text-lg font-extrabold text-[#071D49] sm:text-xl">
           {title}
         </h2>
-        <p className="mt-1 text-sm leading-6 text-slate-500">
-          {description}
-        </p>
+        <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
       </div>
     </div>
   );
@@ -427,15 +425,15 @@ export default function SafetyProfileClient({
     return (
       <main className="tsc-workspace">
         <div className="mx-auto flex min-h-80 max-w-2xl flex-col items-center justify-center rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-orange-50 text-3xl">
+          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-[#FFF4E8] text-3xl">
             🛡️
           </div>
-          <div className="mt-5 h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-orange-500" />
+          <div className="mt-5 h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-[#F28C28]" />
           <h2 className="mt-4 text-lg font-extrabold text-[#071D49]">
             Preparing your safety profile
           </h2>
           <p className="mt-2 text-sm text-slate-500">
-            Securely retrieving your traveller information...
+            Securely retrieving your traveller safety information...
           </p>
         </div>
       </main>
@@ -447,17 +445,17 @@ export default function SafetyProfileClient({
       <nav className="mb-4 flex flex-wrap items-center gap-2 text-sm text-slate-500">
         <Link
           href="/dashboard"
-          className="font-semibold text-[#164a83] hover:text-orange-600"
+          className="font-semibold text-[#164a83] hover:text-[#F28C28]"
         >
-          Dashboard
+          🏠 Dashboard
         </Link>
         <span>/</span>
         <span className="font-semibold text-slate-700">
-          Safety Protection
+          🛡️ Safety Protection
         </span>
       </nav>
 
-      {/* Safety header */}
+      {/* Safety Hero Header */}
       <section className="relative mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-[#071D49] via-[#103568] to-[#164a83] p-6 text-white shadow-xl sm:p-8">
         <div className="pointer-events-none absolute -right-16 -top-20 h-72 w-72 rounded-full border border-white/10 bg-white/[0.03]" />
         <div className="pointer-events-none absolute -bottom-28 right-20 h-64 w-64 rounded-full border border-white/10" />
@@ -472,7 +470,7 @@ export default function SafetyProfileClient({
                 TRAVELLER SAFETY
               </div>
               <div className="mt-1 text-xs text-blue-100">
-                Your personal safety information
+                Your personal safety & emergency hub
               </div>
             </div>
           </div>
@@ -483,19 +481,19 @@ export default function SafetyProfileClient({
           </div>
 
           <h1 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Safety Protection
+            Safety Protection ✨
           </h1>
 
           <p className="mt-3 max-w-2xl text-sm leading-7 text-blue-100 sm:text-base">
             Welcome, {travellerName}. Be prepared and travel protected. Keep
-            important health information and trusted emergency contacts up to
-            date.
+            important medical details, preferences, and trusted emergency contacts
+            up to date.
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">
             <a
               href="#medical-information"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-extrabold text-white shadow-lg transition hover:bg-orange-600"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#F28C28] px-5 py-3 text-sm font-extrabold text-white shadow-lg transition hover:bg-orange-600"
             >
               🩺 Update safety details
             </a>
@@ -517,8 +515,8 @@ export default function SafetyProfileClient({
         </div>
       </section>
 
-      {/* Privacy notice */}
-      <div className="mb-6 flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 sm:p-5">
+      {/* Privacy Notice */}
+      <div className="mb-6 flex items-start gap-3.5 rounded-2xl border border-blue-100 bg-blue-50 p-4 sm:p-5">
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white text-xl shadow-sm">
           🔒
         </span>
@@ -539,7 +537,7 @@ export default function SafetyProfileClient({
           role="alert"
           className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
         >
-          <span>{error}</span>
+          <span>⚠️ {error}</span>
           <button
             type="button"
             onClick={() => setError("")}
@@ -554,9 +552,9 @@ export default function SafetyProfileClient({
       {message && (
         <div
           role="status"
-          className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"
+          className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800"
         >
-          <span>✓ {message}</span>
+          <span>✅ {message}</span>
           <button
             type="button"
             onClick={() => setMessage("")}
@@ -568,7 +566,7 @@ export default function SafetyProfileClient({
         </div>
       )}
 
-      {/* Profile overview */}
+      {/* Profile Overview Grid */}
       <section className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
@@ -582,7 +580,7 @@ export default function SafetyProfileClient({
           </strong>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-600 transition-all"
+              className="h-full rounded-full bg-gradient-to-r from-orange-400 to-[#F28C28] transition-all"
               style={{ width: `${completion}%` }}
             />
           </div>
@@ -608,7 +606,7 @@ export default function SafetyProfileClient({
             <span className="text-[10px] font-extrabold tracking-wider text-slate-500">
               RESPONDER SHARING
             </span>
-            <span className="text-xl">🛡️</span>
+            <span className="text-xl">🚨</span>
           </div>
           <strong className="mt-3 block text-xl font-extrabold text-[#071D49]">
             {form.share_safety_information_with_responders
@@ -625,7 +623,7 @@ export default function SafetyProfileClient({
             <span className="text-[10px] font-extrabold tracking-wider text-slate-500">
               PRIMARY CONTACT
             </span>
-            <span className="text-xl">☎️</span>
+            <span className="text-xl">⭐</span>
           </div>
           <strong className="mt-3 block truncate text-lg font-extrabold text-[#071D49]">
             {primaryContact?.contact_name || "Not set"}
@@ -636,7 +634,7 @@ export default function SafetyProfileClient({
         </div>
       </section>
 
-      {/* Medical and safety details */}
+      {/* Sections 01 & 02 */}
       <form onSubmit={handleSaveProfile} className="space-y-5">
         <section
           id="medical-information"
@@ -651,7 +649,7 @@ export default function SafetyProfileClient({
 
           <div className="grid gap-5 md:grid-cols-2">
             <label className={fieldClass}>
-              Blood group
+              🩸 Blood group
               <input
                 className={inputClass}
                 value={form.blood_group}
@@ -666,7 +664,7 @@ export default function SafetyProfileClient({
             </label>
 
             <label className={fieldClass}>
-              Preferred language
+              🌐 Preferred language
               <input
                 className={inputClass}
                 value={form.preferred_language}
@@ -682,7 +680,7 @@ export default function SafetyProfileClient({
             </label>
 
             <label className={fieldClass}>
-              Medical conditions
+              🏥 Medical conditions
               <textarea
                 className={inputClass}
                 rows={4}
@@ -695,7 +693,7 @@ export default function SafetyProfileClient({
             </label>
 
             <label className={fieldClass}>
-              Allergies
+              ⚠️ Allergies
               <textarea
                 className={inputClass}
                 rows={4}
@@ -708,7 +706,7 @@ export default function SafetyProfileClient({
             </label>
 
             <label className={fieldClass}>
-              Medications
+              💊 Medications
               <textarea
                 className={inputClass}
                 rows={4}
@@ -721,7 +719,7 @@ export default function SafetyProfileClient({
             </label>
 
             <label className={fieldClass}>
-              Accessibility needs
+              ♿ Accessibility needs
               <textarea
                 className={inputClass}
                 rows={4}
@@ -734,7 +732,7 @@ export default function SafetyProfileClient({
             </label>
 
             <label className={`${fieldClass} md:col-span-2`}>
-              Additional safety information
+              📌 Additional safety information
               <textarea
                 className={inputClass}
                 rows={4}
@@ -748,7 +746,7 @@ export default function SafetyProfileClient({
           </div>
         </section>
 
-        {/* Safety preferences */}
+        {/* Section 02: Safety Preferences */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <SectionHeading
             number="02"
@@ -758,7 +756,7 @@ export default function SafetyProfileClient({
           />
 
           <div className="grid gap-5 lg:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
               <div className="flex items-center gap-3">
                 <span className="grid h-11 w-11 place-items-center rounded-xl bg-white text-xl shadow-sm">
                   🔔
@@ -767,8 +765,8 @@ export default function SafetyProfileClient({
                   <h3 className="font-extrabold text-[#071D49]">
                     Notification channel
                   </h3>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Choose your preferred channel.
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Choose your preferred alert channel.
                   </p>
                 </div>
               </div>
@@ -795,12 +793,12 @@ export default function SafetyProfileClient({
                       aria-pressed={selected}
                       className={`flex min-h-14 items-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold transition ${
                         selected
-                          ? "border-orange-400 bg-orange-50 text-[#071D49] ring-2 ring-orange-100"
+                          ? "border-[#F28C28] bg-[#FFF4E8] text-[#071D49] ring-2 ring-orange-100"
                           : "border-slate-200 bg-white text-slate-600 hover:border-orange-300"
                       }`}
                     >
                       <span className="text-lg">{emoji}</span>
-                      {label}
+                      <span>{label}</span>
                       {selected && (
                         <span className="ml-auto text-orange-600">✓</span>
                       )}
@@ -812,14 +810,14 @@ export default function SafetyProfileClient({
 
             <div className="rounded-2xl border border-slate-200 p-5">
               <div className="flex items-center gap-3">
-                <span className="grid h-11 w-11 place-items-center rounded-xl bg-orange-50 text-xl">
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#FFF4E8] text-xl">
                   🛡️
                 </span>
                 <div>
                   <h3 className="font-extrabold text-[#071D49]">
                     Responder access
                   </h3>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-0.5 text-xs text-slate-500">
                     Manage your safety information sharing preference.
                   </p>
                 </div>
@@ -862,7 +860,7 @@ export default function SafetyProfileClient({
             </p>
 
             <button
-              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-extrabold text-white shadow-md transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#F28C28] px-6 py-3 text-sm font-extrabold text-white shadow-md transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               type="submit"
               disabled={saving}
             >
@@ -872,7 +870,7 @@ export default function SafetyProfileClient({
         </section>
       </form>
 
-      {/* Emergency contacts */}
+      {/* Section 03: Emergency Contacts */}
       <section
         id="emergency-contacts"
         className="mt-6 scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
@@ -886,7 +884,7 @@ export default function SafetyProfileClient({
 
         {contacts.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center">
-            <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-orange-50 text-3xl">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[#FFF4E8] text-3xl">
               ☎️
             </div>
             <h3 className="mt-4 font-extrabold text-[#071D49]">
@@ -898,17 +896,17 @@ export default function SafetyProfileClient({
             </p>
             <button
               type="button"
-              className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-orange-500 px-5 py-3 text-sm font-extrabold text-white transition hover:bg-orange-600"
+              className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#F28C28] px-5 py-3 text-sm font-extrabold text-white transition hover:bg-orange-600"
               onClick={openNewContact}
             >
-              + Add your first contact
+              ➕ Add your first contact
             </button>
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
             {contacts.map((contact) => (
               <article
-                className="rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-orange-200 hover:shadow-lg"
+                className="rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-orange-200 hover:shadow-md"
                 key={contact.id}
               >
                 <div className="flex items-start gap-3">
@@ -923,7 +921,7 @@ export default function SafetyProfileClient({
                       </h3>
 
                       {contact.is_primary && (
-                        <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[10px] font-extrabold text-orange-700">
+                        <span className="rounded-full border border-orange-200 bg-[#FFF4E8] px-3 py-1 text-[10px] font-extrabold text-orange-700">
                           ⭐ PRIMARY
                         </span>
                       )}
@@ -969,7 +967,7 @@ export default function SafetyProfileClient({
                 <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3">
                   <div className="min-w-0">
                     <strong className="block text-sm text-[#071D49]">
-                      Emergency notifications
+                      🔔 Emergency notifications
                     </strong>
                     <span className="mt-1 block text-xs text-slate-500">
                       {contact.can_receive_emergency_notifications
@@ -994,7 +992,7 @@ export default function SafetyProfileClient({
                       type="button"
                       disabled={updatingContactId === contact.id}
                       onClick={() => void handlePrimaryContact(contact)}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-extrabold text-orange-700 transition hover:bg-orange-100 disabled:opacity-50"
+                      className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-orange-200 bg-[#FFF4E8] px-4 py-2 text-xs font-extrabold text-orange-700 transition hover:bg-orange-100 disabled:opacity-50"
                     >
                       ⭐ Make primary
                     </button>
@@ -1032,7 +1030,9 @@ export default function SafetyProfileClient({
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-lg font-extrabold text-[#071D49]">
-                {editingId ? "Edit emergency contact" : "Add an emergency contact"}
+                {editingId
+                  ? "✏️ Edit emergency contact"
+                  : "➕ Add an emergency contact"}
               </h3>
               <p className="mt-1 text-sm text-slate-500">
                 Provide accurate details so your trusted contact can be reached.
@@ -1044,7 +1044,7 @@ export default function SafetyProfileClient({
               className={secondaryButton}
               onClick={openNewContact}
             >
-              + New contact
+              ➕ New contact
             </button>
           </div>
 
@@ -1171,7 +1171,7 @@ export default function SafetyProfileClient({
                 className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
                 role="alert"
               >
-                {error}
+                ⚠️ {error}
               </div>
             )}
 
@@ -1194,7 +1194,7 @@ export default function SafetyProfileClient({
               <button
                 type="submit"
                 disabled={contactSaving}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-extrabold text-white shadow-md transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#F28C28] px-6 py-3 text-sm font-extrabold text-white shadow-md transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {contactSaving
                   ? "Saving contact..."
@@ -1207,7 +1207,7 @@ export default function SafetyProfileClient({
         </div>
       </section>
 
-      {/* Safety reminder */}
+      {/* Safety Reminder */}
       <section className="mt-6 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-5 sm:p-6">
         <div className="flex items-start gap-3">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white text-xl shadow-sm">
@@ -1243,7 +1243,7 @@ export default function SafetyProfileClient({
 
         <Link
           href="/dashboard"
-          className="text-sm font-bold text-[#164a83] hover:text-orange-600"
+          className="text-sm font-bold text-[#164a83] hover:text-[#F28C28]"
         >
           ← Back to dashboard
         </Link>
