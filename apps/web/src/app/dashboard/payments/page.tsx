@@ -1,7 +1,10 @@
+import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+
+export const instant = false;
 
 export const metadata = {
   title: "My Payments | TSC",
@@ -82,7 +85,31 @@ function label(value: string) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-export default async function TravellerPaymentsPage() {
+function PaymentsSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
+        {[0, 1, 2].map((item) => (
+          <div
+            key={item}
+            className="h-24 animate-pulse rounded-2xl border border-[#E6ECF2] bg-white p-4"
+          />
+        ))}
+      </div>
+      <div className="h-24 animate-pulse rounded-2xl border border-[#E6ECF2] bg-white p-5" />
+      <div className="space-y-3.5">
+        {[0, 1].map((item) => (
+          <div
+            key={item}
+            className="h-44 animate-pulse rounded-2xl border border-[#E6ECF2] bg-white p-5"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+async function PaymentsContent() {
   await connection();
 
   const supabase = await createSupabaseServerClient();
@@ -117,6 +144,195 @@ export default async function TravellerPaymentsPage() {
     0
   );
 
+  return (
+    <div className="space-y-5">
+      {/* 3 Compact Mobile-Friendly Stat Cards */}
+      <section className="grid grid-cols-3 gap-2.5 sm:gap-4">
+        <div className="rounded-2xl border border-[#E6ECF2] bg-white p-3.5 shadow-2xs sm:p-5">
+          <p className="text-[11px] font-semibold text-[#718096] sm:text-xs">
+            📋 Total
+          </p>
+          <p className="mt-2 text-xl font-black tabular-nums text-[#102D50] sm:text-2xl">
+            {records.length}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-[#E6ECF2] bg-white p-3.5 shadow-2xs sm:p-5">
+          <p className="text-[11px] font-semibold text-[#718096] sm:text-xs">
+            ✅ Paid
+          </p>
+          <p className="mt-2 text-xl font-black tabular-nums text-[#059669] sm:text-2xl">
+            {successful.length}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-[#E6ECF2] bg-white p-3.5 shadow-2xs sm:p-5">
+          <p className="text-[11px] font-semibold text-[#718096] sm:text-xs">
+            ⏳ Pending
+          </p>
+          <p className="mt-2 text-xl font-black tabular-nums text-[#D97706] sm:text-2xl">
+            {pending.length}
+          </p>
+        </div>
+      </section>
+
+      {/* Successful Payment Value Banner */}
+      <section className="flex items-center justify-between gap-4 rounded-2xl border border-[#E6ECF2] bg-white p-4 shadow-2xs sm:px-6 sm:py-5">
+        <div className="min-w-0">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#718096] sm:text-[11px]">
+            Successful payment value
+          </p>
+          <p className="mt-1.5 truncate text-xl font-black tabular-nums text-[#059669] sm:text-2xl">
+            {money(successfulValue)}
+          </p>
+        </div>
+
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#E8F7EF] text-xl">
+          🎉
+        </div>
+      </section>
+
+      {/* Payment History Section */}
+      <section className="space-y-3.5">
+        <div className="flex items-end justify-between gap-2 pt-1">
+          <div>
+            <h2 className="text-lg font-black text-[#102D50]">
+              Payment history
+            </h2>
+            <p className="text-xs text-[#718096]">
+              Your latest 100 payment records
+            </p>
+          </div>
+          <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#187B83]">
+            {records.length} {records.length === 1 ? "record" : "records"}
+          </span>
+        </div>
+
+        {error ? (
+          <div className="rounded-3xl border border-red-200 bg-white p-7 text-center shadow-2xs">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-2xl">
+              ⚠️
+            </div>
+            <h3 className="mt-3.5 text-base font-black text-[#102D50]">
+              Payment history unavailable
+            </h3>
+            <p className="mx-auto mt-1.5 max-w-md text-xs leading-5 text-[#718096] sm:text-sm">
+              We could not load your payment history. Please refresh and try
+              again.
+            </p>
+            <Link
+              href="/dashboard/payments"
+              className="mt-5 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#174D78] px-5 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#102D50]"
+            >
+              <span>🔄</span>
+              <span>Try again</span>
+            </Link>
+          </div>
+        ) : records.length === 0 ? (
+          <div className="rounded-3xl border border-[#E6ECF2] bg-white p-8 text-center shadow-2xs">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E6F4F3] text-2xl">
+              🧾
+            </div>
+            <h3 className="mt-4 text-base font-black text-[#102D50] sm:text-lg">
+              No payment records yet
+            </h3>
+            <p className="mx-auto mt-1.5 max-w-md text-xs leading-5 text-[#718096] sm:text-sm">
+              Payments you make through TSC will appear here with their
+              references and transaction statuses.
+            </p>
+            <Link
+              href="/dashboard/wallet"
+              className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#174D78] px-5 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#102D50] sm:text-sm"
+            >
+              <span>👛</span>
+              <span>Go to My Wallet</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-3.5">
+            {records.map((payment) => {
+              const badge = statusBadge(payment.status);
+              return (
+                <article
+                  key={payment.id}
+                  className="rounded-2xl border border-[#E6ECF2] bg-white p-4 shadow-2xs transition hover:border-[#187B83]/40 sm:p-5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-extrabold ${badge.classes}`}
+                      >
+                        <span>{badge.emoji}</span>
+                        <span>{badge.text}</span>
+                      </span>
+                      <span className="rounded-md bg-[#F0F5F9] px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[#718096]">
+                        🏦 {label(payment.provider)}
+                      </span>
+                    </div>
+
+                    <time className="text-[11px] font-medium text-[#718096] sm:text-xs">
+                      {dateLabel(payment.created_at)}
+                    </time>
+                  </div>
+
+                  <div className="mt-3.5 flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-xl font-black tabular-nums text-[#102D50] sm:text-2xl">
+                      {money(
+                        Number(payment.amount_minor),
+                        payment.currency_code
+                      )}
+                    </h3>
+                    <span className="text-xs font-extrabold text-[#187B83] sm:text-sm">
+                      🏷️ {label(payment.purpose)}
+                    </span>
+                  </div>
+
+                  {payment.description && (
+                    <p className="mt-1.5 text-xs leading-5 text-[#718096] sm:text-sm">
+                      {payment.description}
+                    </p>
+                  )}
+
+                  <div className="my-3.5 h-px bg-[#E6ECF2]" />
+
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
+                    <div className="min-w-0 rounded-xl bg-[#F8FAFC] p-3">
+                      <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#718096]">
+                        🔖 Payment reference
+                      </p>
+                      <p className="mt-1 select-all break-all text-xs font-bold text-[#172B42]">
+                        {payment.reference}
+                      </p>
+                    </div>
+
+                    <div className="min-w-0 rounded-xl bg-[#F8FAFC] p-3">
+                      <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#718096]">
+                        🧾 Provider transaction ID
+                      </p>
+                      <p className="mt-1 select-all break-all text-xs font-bold text-[#172B42]">
+                        {payment.provider_transaction_id ||
+                          "Not yet available"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {payment.verified_at && (
+                    <div className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg bg-[#E8F7EF] px-2.5 py-1.5 text-xs font-bold text-[#059669]">
+                      <span>🛡️</span>
+                      <span>Verified {dateLabel(payment.verified_at)}</span>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+export default function TravellerPaymentsPage() {
   return (
     <main className="min-h-screen bg-[#F4F7FB] text-[#172B42]">
       <div className="mx-auto max-w-4xl space-y-5 px-4 py-5 sm:px-6 sm:py-7">
@@ -184,188 +400,10 @@ export default async function TravellerPaymentsPage() {
           </div>
         </section>
 
-        {/* 3 Compact Mobile-Friendly Stat Cards */}
-        <section className="grid grid-cols-3 gap-2.5 sm:gap-4">
-          <div className="rounded-2xl border border-[#E6ECF2] bg-white p-3.5 shadow-2xs sm:p-5">
-            <p className="text-[11px] font-semibold text-[#718096] sm:text-xs">
-              📋 Total
-            </p>
-            <p className="mt-2 text-xl font-black tabular-nums text-[#102D50] sm:text-2xl">
-              {records.length}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-[#E6ECF2] bg-white p-3.5 shadow-2xs sm:p-5">
-            <p className="text-[11px] font-semibold text-[#718096] sm:text-xs">
-              ✅ Paid
-            </p>
-            <p className="mt-2 text-xl font-black tabular-nums text-[#059669] sm:text-2xl">
-              {successful.length}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-[#E6ECF2] bg-white p-3.5 shadow-2xs sm:p-5">
-            <p className="text-[11px] font-semibold text-[#718096] sm:text-xs">
-              ⏳ Pending
-            </p>
-            <p className="mt-2 text-xl font-black tabular-nums text-[#D97706] sm:text-2xl">
-              {pending.length}
-            </p>
-          </div>
-        </section>
-
-        {/* Successful Payment Value Banner */}
-        <section className="flex items-center justify-between gap-4 rounded-2xl border border-[#E6ECF2] bg-white p-4 shadow-2xs sm:px-6 sm:py-5">
-          <div className="min-w-0">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#718096] sm:text-[11px]">
-              Successful payment value
-            </p>
-            <p className="mt-1.5 truncate text-xl font-black tabular-nums text-[#059669] sm:text-2xl">
-              {money(successfulValue)}
-            </p>
-          </div>
-
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#E8F7EF] text-xl">
-            🎉
-          </div>
-        </section>
-
-        {/* Payment History Section */}
-        <section className="space-y-3.5">
-          <div className="flex items-end justify-between gap-2 pt-1">
-            <div>
-              <h2 className="text-lg font-black text-[#102D50]">
-                Payment history
-              </h2>
-              <p className="text-xs text-[#718096]">
-                Your latest 100 payment records
-              </p>
-            </div>
-            <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#187B83]">
-              {records.length} {records.length === 1 ? "record" : "records"}
-            </span>
-          </div>
-
-          {error ? (
-            <div className="rounded-3xl border border-red-200 bg-white p-7 text-center shadow-2xs">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-2xl">
-                ⚠️
-              </div>
-              <h3 className="mt-3.5 text-base font-black text-[#102D50]">
-                Payment history unavailable
-              </h3>
-              <p className="mx-auto mt-1.5 max-w-md text-xs leading-5 text-[#718096] sm:text-sm">
-                We could not load your payment history. Please refresh and try
-                again.
-              </p>
-              <Link
-                href="/dashboard/payments"
-                className="mt-5 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#174D78] px-5 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#102D50]"
-              >
-                <span>🔄</span>
-                <span>Try again</span>
-              </Link>
-            </div>
-          ) : records.length === 0 ? (
-            <div className="rounded-3xl border border-[#E6ECF2] bg-white p-8 text-center shadow-2xs">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E6F4F3] text-2xl">
-                🧾
-              </div>
-              <h3 className="mt-4 text-base font-black text-[#102D50] sm:text-lg">
-                No payment records yet
-              </h3>
-              <p className="mx-auto mt-1.5 max-w-md text-xs leading-5 text-[#718096] sm:text-sm">
-                Payments you make through TSC will appear here with their
-                references and transaction statuses.
-              </p>
-              <Link
-                href="/dashboard/wallet"
-                className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#174D78] px-5 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#102D50] sm:text-sm"
-              >
-                <span>👛</span>
-                <span>Go to My Wallet</span>
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-3.5">
-              {records.map((payment) => {
-                const badge = statusBadge(payment.status);
-                return (
-                  <article
-                    key={payment.id}
-                    className="rounded-2xl border border-[#E6ECF2] bg-white p-4 shadow-2xs transition hover:border-[#187B83]/40 sm:p-5"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-extrabold ${badge.classes}`}
-                        >
-                          <span>{badge.emoji}</span>
-                          <span>{badge.text}</span>
-                        </span>
-                        <span className="rounded-md bg-[#F0F5F9] px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[#718096]">
-                          🏦 {label(payment.provider)}
-                        </span>
-                      </div>
-
-                      <time className="text-[11px] font-medium text-[#718096] sm:text-xs">
-                        {dateLabel(payment.created_at)}
-                      </time>
-                    </div>
-
-                    <div className="mt-3.5 flex flex-wrap items-baseline justify-between gap-2">
-                      <h3 className="text-xl font-black tabular-nums text-[#102D50] sm:text-2xl">
-                        {money(
-                          Number(payment.amount_minor),
-                          payment.currency_code
-                        )}
-                      </h3>
-                      <span className="text-xs font-extrabold text-[#187B83] sm:text-sm">
-                        🏷️ {label(payment.purpose)}
-                      </span>
-                    </div>
-
-                    {payment.description && (
-                      <p className="mt-1.5 text-xs leading-5 text-[#718096] sm:text-sm">
-                        {payment.description}
-                      </p>
-                    )}
-
-                    <div className="my-3.5 h-px bg-[#E6ECF2]" />
-
-                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
-                      <div className="min-w-0 rounded-xl bg-[#F8FAFC] p-3">
-                        <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#718096]">
-                          🔖 Payment reference
-                        </p>
-                        <p className="mt-1 select-all break-all text-xs font-bold text-[#172B42]">
-                          {payment.reference}
-                        </p>
-                      </div>
-
-                      <div className="min-w-0 rounded-xl bg-[#F8FAFC] p-3">
-                        <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#718096]">
-                          🧾 Provider transaction ID
-                        </p>
-                        <p className="mt-1 select-all break-all text-xs font-bold text-[#172B42]">
-                          {payment.provider_transaction_id ||
-                            "Not yet available"}
-                        </p>
-                      </div>
-                    </div>
-
-                    {payment.verified_at && (
-                      <div className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg bg-[#E8F7EF] px-2.5 py-1.5 text-xs font-bold text-[#059669]">
-                        <span>🛡️</span>
-                        <span>Verified {dateLabel(payment.verified_at)}</span>
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
+        {/* Dynamic Auth + Supabase Payment Records wrapped in Suspense */}
+        <Suspense fallback={<PaymentsSkeleton />}>
+          <PaymentsContent />
+        </Suspense>
 
         {/* Wallet Helper Card */}
         <section className="rounded-2xl border border-[#E6ECF2] bg-white p-4 shadow-2xs sm:p-5">
