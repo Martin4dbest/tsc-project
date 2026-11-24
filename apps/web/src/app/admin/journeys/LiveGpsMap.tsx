@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -12,8 +12,14 @@ export type LiveGpsPoint = {
   accuracy_meters?: number | null;
 };
 
+type LiveGpsJourney = {
+  id: string;
+  locations: LiveGpsPoint[];
+};
+
 type LiveGpsMapProps = {
   points?: LiveGpsPoint[];
+  journey?: LiveGpsJourney;
   latitude?: number | null;
   longitude?: number | null;
   className?: string;
@@ -21,6 +27,7 @@ type LiveGpsMapProps = {
 
 export default function LiveGpsMap({
   points = [],
+  journey,
   latitude = null,
   longitude = null,
   className = "live-gps-leaflet-map",
@@ -29,29 +36,40 @@ export default function LiveGpsMap({
   const mapRef = useRef<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
 
-  const normalizedPoints: LiveGpsPoint[] =
-    points.length > 0
-      ? points.filter(
-          (p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude)
-        )
-      : latitude !== null &&
-        longitude !== null &&
-        Number.isFinite(latitude) &&
-        Number.isFinite(longitude)
-      ? [{ latitude, longitude }]
-      : [];
+  const normalizedPoints = useMemo<LiveGpsPoint[]>(() => {
+    const source =
+      journey?.locations?.length
+        ? journey.locations
+        : points.length > 0
+          ? points
+          : latitude !== null && longitude !== null
+            ? [{ latitude, longitude }]
+            : [];
+
+    return source.filter(
+      (point) =>
+        Number.isFinite(point.latitude) &&
+        Number.isFinite(point.longitude) &&
+        point.latitude >= -90 &&
+        point.latitude <= 90 &&
+        point.longitude >= -180 &&
+        point.longitude <= 180
+    );
+  }, [journey, points, latitude, longitude]);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof window === "undefined") return;
 
-    // Prevent "Map container is being reused by another instance"
     if (mapRef.current) {
       mapRef.current.remove();
       mapRef.current = null;
     }
 
-    const containerWithId = el as HTMLDivElement & { _leaflet_id?: number };
+    const containerWithId = el as HTMLDivElement & {
+      _leaflet_id?: number;
+    };
+
     if (containerWithId._leaflet_id) {
       delete containerWithId._leaflet_id;
     }
@@ -86,22 +104,21 @@ export default function LiveGpsMap({
       mapRef.current = null;
       layerGroupRef.current = null;
     };
-    // Initialize map instance once per mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const map = mapRef.current;
     const group = layerGroupRef.current;
+
     if (!map || !group) return;
 
     group.clearLayers();
 
     if (normalizedPoints.length === 0) return;
 
-    const latLngs: L.LatLngExpression[] = normalizedPoints.map((pt) => [
-      pt.latitude,
-      pt.longitude,
+    const latLngs: L.LatLngExpression[] = normalizedPoints.map((point) => [
+      point.latitude,
+      point.longitude,
     ]);
 
     if (latLngs.length > 1) {
@@ -111,7 +128,24 @@ export default function LiveGpsMap({
       }).addTo(group);
     }
 
+    normalizedPoints.slice(0, -1).forEach((point) => {
+      L.circleMarker([point.latitude, point.longitude], {
+        radius: 5,
+        color: "#687789",
+        weight: 2,
+        fillColor: "#9AA5B3",
+        fillOpacity: 0.8,
+      })
+        .bindPopup(
+          point.recorded_at
+            ? `Recorded: ${new Date(point.recorded_at).toLocaleString()}`
+            : "Earlier position"
+        )
+        .addTo(group);
+    });
+
     const latest = normalizedPoints[normalizedPoints.length - 1];
+
     L.circleMarker([latest.latitude, latest.longitude], {
       radius: 8,
       color: "#071D49",
@@ -127,7 +161,10 @@ export default function LiveGpsMap({
       .addTo(group);
 
     if (latLngs.length > 1) {
-      map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24], maxZoom: 16 });
+      map.fitBounds(L.latLngBounds(latLngs), {
+        padding: [24, 24],
+        maxZoom: 16,
+      });
     } else {
       map.setView([latest.latitude, latest.longitude], 15);
     }
