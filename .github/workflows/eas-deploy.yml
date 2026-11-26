@@ -1,0 +1,40 @@
+name: TSC Android OTA and APK Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: tsc-eas-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish OTA and Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Publish OTA update
+        working-directory: apps/mobile
+        run: npx eas-cli@latest update --branch production --message "GitHub commit ${{ github.sha }}" --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android APK
+        working-directory: apps/mobile
+        run: npx eas-cli@latest build --platform android --profile production --non-interactive --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
