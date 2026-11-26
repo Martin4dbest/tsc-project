@@ -22,6 +22,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
 
       - name: Install dependencies
         working-directory: apps/mobile
@@ -29,12 +31,14 @@ jobs:
 
       - name: Publish OTA update
         working-directory: apps/mobile
-        run: npx eas-cli@latest update --branch production --message "GitHub commit ${{ github.sha }}" --non-interactive
+        run: npx eas-cli@latest update --branch production --message "GitHub commit ${{ github.sha }}"
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: "1"
 
       - name: Build Android APK
         working-directory: apps/mobile
         run: npx eas-cli@latest build --platform android --profile production --non-interactive --no-wait
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: "1"
