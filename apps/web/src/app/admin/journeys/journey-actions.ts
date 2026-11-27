@@ -332,3 +332,80 @@ export async function getLiveGpsMonitoringData(): Promise<{
 
   return { records };
 }
+
+export type JourneyFeeSettings = {
+  enabled: boolean;
+  interstate_enabled: boolean;
+  fee_ngn: number;
+  intrastate_threshold_km: number;
+};
+
+export async function getJourneyFeeSettings() {
+  const permission = await requireAdminPermission("journeys.manage");
+
+  if (!permission.authorized) {
+    return { success: false as const, error: "Permission denied." };
+  }
+
+  const admin = createSupabaseAdminClient();
+
+  const { data, error } = await admin
+    .from("tsc_journey_fee_settings")
+    .select("enabled, interstate_enabled, fee_ngn, intrastate_threshold_km")
+    .eq("id", 1)
+    .single();
+
+  if (error || !data) {
+    return {
+      success: false as const,
+      error: error?.message ?? "Unable to load journey fee settings.",
+    };
+  }
+
+  return { success: true as const, settings: data };
+}
+
+export async function saveJourneyFeeSettings(
+  settings: JourneyFeeSettings
+) {
+  const permission = await requireAdminPermission("journeys.manage");
+
+  if (!permission.authorized) {
+    return { success: false as const, error: "Permission denied." };
+  }
+
+  if (
+    typeof settings.enabled !== "boolean" ||
+    typeof settings.interstate_enabled !== "boolean" ||
+    !Number.isFinite(settings.fee_ngn) ||
+    !Number.isFinite(settings.intrastate_threshold_km) ||
+    settings.fee_ngn < 0 ||
+    settings.fee_ngn > 100_000_000 ||
+    settings.intrastate_threshold_km < 0 ||
+    settings.intrastate_threshold_km > 100_000
+  ) {
+    return { success: false as const, error: "Invalid settings values." };
+  }
+
+  const admin = createSupabaseAdminClient();
+
+  const { error } = await admin
+    .from("tsc_journey_fee_settings")
+    .update({
+      enabled: settings.enabled,
+      interstate_enabled: settings.interstate_enabled,
+      fee_ngn: settings.fee_ngn,
+      intrastate_threshold_km: settings.intrastate_threshold_km,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", 1);
+
+  if (error) {
+    return { success: false as const, error: error.message };
+  }
+
+  revalidatePath("/admin/journeys");
+  revalidatePath("/admin/journeys/fees");
+
+  return { success: true as const };
+}
