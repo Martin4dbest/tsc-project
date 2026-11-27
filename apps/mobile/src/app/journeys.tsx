@@ -330,11 +330,13 @@ export default function JourneysScreen() {
 
   const changeStatus = async (journey: Journey, status: JourneyStatus) => {
     const messages: Record<string, string> = {
-      scheduled: '📅 Schedule this journey?',
-      active: '🟢 Start this journey now?',
-      completed: '🏁 Mark this journey as completed?',
-      cancelled: '🚫 Cancel this journey?',
+      scheduled: 'Schedule this journey?',
+      active: 'Start this journey now?',
+      completed: 'Mark this journey as completed?',
+      cancelled: 'Cancel this journey?',
     };
+
+    const API_BASE = 'https://www.tscglobalmobility.com';
 
     Alert.alert('Confirm action', messages[status] || 'Update this journey?', [
       { text: 'Go back', style: 'cancel' },
@@ -344,11 +346,101 @@ export default function JourneysScreen() {
         onPress: async () => {
           setSaving(true);
           try {
-            const {
-              data: { session },
-            } = await supabase.auth.getSession();
+            const { data: { session } } = await supabase.auth.getSession();
+
             if (!session) {
               router.replace('/login');
+              return;
+            }
+
+            if (status === 'scheduled') {
+              const origin = journey.origin_address?.trim() || journey.origin_name.trim();
+              const destination =
+                journey.destination_address?.trim() || journey.destination_name.trim();
+
+              const quoteResponse = await fetch(`${API_BASE}/api/journeys/route-quote`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({ origin, destination }),
+              });
+
+              const quote = await quoteResponse.json();
+
+              if (!quoteResponse.ok || !quote.verified || !quote.quoteId) {
+                throw new Error(quote.error || 'Unable to verify this journey route.');
+              }
+
+              const fee =
+                quote.fee_ngn ??
+                quote.feeNgn ??
+                quote.amount_ngn ??
+                quote.amount ??
+                0;
+
+              const distance =
+                quote.distance_km ??
+                quote.distanceKm ??
+                quote.distance ??
+                null;
+
+              const routeDescription = quote.routeDescription || `${origin} → ${destination}`;
+
+              const confirmed = await new Promise<boolean>((resolve) => {
+                Alert.alert(
+                  'Confirm journey schedule',
+                  [
+                    routeDescription,
+                    '',
+                    distance !== null ? `Distance: ${distance} km` : null,
+                    `Scheduling fee: ₦${Number(fee).toLocaleString()}`,
+                    '',
+                    'Proceed with scheduling this journey?',
+                  ]
+                    .filter(Boolean)
+                    .join('\n'),
+                  [
+                    { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                    { text: 'Schedule', onPress: () => resolve(true) },
+                  ],
+                  { cancelable: true, onDismiss: () => resolve(false) }
+                );
+              });
+
+              if (!confirmed) return;
+
+              const scheduleResponse = await fetch(`${API_BASE}/api/journeys/schedule`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                  journeyId: journey.id,
+                  quoteId: quote.quoteId,
+                }),
+              });
+
+              const scheduleResult = await scheduleResponse.json();
+
+              if (!scheduleResponse.ok || !scheduleResult.success) {
+                throw new Error(
+                  scheduleResult.error ||
+                    scheduleResult.message ||
+                    'Journey scheduling failed.'
+                );
+              }
+
+              setModal(null);
+              setSelected(null);
+              await loadJourneys(true);
+
+              Alert.alert(
+                'Journey scheduled!',
+                `Your journey has been scheduled.\n\n${origin} → ${destination}\nFee: ₦${Number(fee).toLocaleString()}`
+              );
               return;
             }
 
@@ -363,6 +455,7 @@ export default function JourneysScreen() {
             setModal(null);
             setSelected(null);
             await loadJourneys(true);
+
             Alert.alert(
               'Journey updated',
               `Journey is now ${STATUS_META[status].label.toLowerCase()}.`
@@ -380,7 +473,6 @@ export default function JourneysScreen() {
       },
     ]);
   };
-
   const openDetails = (journey: Journey) => {
     setSelected(journey);
     setModal('details');

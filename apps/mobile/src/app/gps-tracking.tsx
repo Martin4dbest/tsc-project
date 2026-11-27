@@ -11,8 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
+import OSMRouteMap from '../components/OSMRouteMap';
 import { supabase } from '../../lib/supabase';
 
 type Journey = {
@@ -304,6 +304,7 @@ export default function GpsTrackingScreen() {
   const coordinates = updates.map((item) => ({
     latitude: item.latitude,
     longitude: item.longitude,
+    recorded_at: item.recorded_at,
   }));
 
   const isStale = latest
@@ -558,66 +559,7 @@ export default function GpsTrackingScreen() {
               </Text>
             </View>
 
-            <View style={styles.mapCard}>
-              {mapRegion && latest ? (
-                <MapView
-                  style={styles.map}
-                  provider={PROVIDER_DEFAULT}
-                  initialRegion={mapRegion}
-                  region={mapRegion}
-                  showsCompass
-                  showsScale
-                  toolbarEnabled={false}
-                  loadingEnabled
-                >
-                  {coordinates.length > 1 && (
-                    <Polyline
-                      coordinates={coordinates}
-                      strokeColor={COLORS.orange}
-                      strokeWidth={4}
-                    />
-                  )}
-
-                  <Marker
-                    coordinate={{
-                      latitude: latest.latitude,
-                      longitude: latest.longitude,
-                    }}
-                    title="Your last recorded location"
-                    description={`Updated ${formatTime(latest.recorded_at)}`}
-                    pinColor={COLORS.orange}
-                  />
-                </MapView>
-              ) : (
-                <View style={styles.mapEmpty}>
-                  <Ionicons name="map-outline" size={40} color="#9AA5B1" />
-                  <Text style={styles.mapEmptyTitle}>
-                    {journey.location_sharing_enabled
-                      ? 'Waiting for your first GPS position'
-                      : 'GPS sharing is turned off'}
-                  </Text>
-                  <Text style={styles.mapEmptyText}>
-                    {journey.location_sharing_enabled
-                      ? 'Keep TSC open while GPS obtains and records your location.'
-                      : 'Enable GPS sharing from your journey details to begin recording your route.'}
-                  </Text>
-                  <Pressable
-                    style={styles.mapAction}
-                    onPress={() =>
-                      journey.location_sharing_enabled
-                        ? void loadTrackingData(true)
-                        : router.push('/journeys' as never)
-                    }
-                  >
-                    <Text style={styles.mapActionText}>
-                      {journey.location_sharing_enabled
-                        ? '↻ Refresh location'
-                        : 'Open Journey Management'}
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
-            </View>
+            <View style={styles.mapCard}><OSMRouteMap coordinates={coordinates} latest={latest ? { latitude: latest.latitude, longitude: latest.longitude } : null} /></View>
 
             {/* Location Information */}
             <View style={styles.sectionHeading}>

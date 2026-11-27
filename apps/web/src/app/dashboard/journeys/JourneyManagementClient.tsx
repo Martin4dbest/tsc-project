@@ -141,6 +141,16 @@ export default function JourneyManagementClient({
   const [selected, setSelected] = useState<Journey | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<JourneyForm>(EMPTY_FORM);
+  const [pendingSchedule, setPendingSchedule] = useState<{
+    journey: Journey;
+    quoteId: string;
+    origin: string;
+    destination: string;
+    fee: number;
+    distance: number;
+    interstate: boolean;
+    qualifiesForFee: boolean;
+  } | null>(null);
 
   const loadJourneys = useCallback(
     async (quiet = false) => {
@@ -354,13 +364,15 @@ export default function JourneyManagementClient({
 
   async function changeStatus(journey: Journey, status: JourneyStatus) {
     const messages: Record<string, string> = {
-      scheduled: "📅 Schedule this journey?",
+      scheduled: "Verify this journey's route and schedule it?",
       active: "🟢 Start this journey now?",
       completed: "🏁 Mark this journey as completed?",
       cancelled: "🚫 Cancel this journey?",
     };
 
-    if (!window.confirm(messages[status] || "Update this journey?")) return;
+    if (status !== "scheduled" && !window.confirm(messages[status] || "Update this journey?")) {
+      return;
+    }
 
     setSaving(true);
     setNotice("");
@@ -373,6 +385,43 @@ export default function JourneyManagementClient({
 
       if (sessionError || !session) {
         window.location.href = "/login";
+        return;
+      }
+
+      if (status === "scheduled") {
+        const origin =
+          journey.origin_address?.trim() || journey.origin_name.trim();
+        const destination =
+          journey.destination_address?.trim() ||
+          journey.destination_name.trim();
+
+        const quoteResponse = await fetch("/api/journeys/route-quote", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ origin, destination }),
+        });
+
+        const quote = await quoteResponse.json();
+
+        if (!quoteResponse.ok || !quote.verified || !quote.quoteId) {
+          throw new Error(
+            quote.error || "Unable to verify this journey's route."
+          );
+        }
+
+        setPendingSchedule({
+          journey,
+          quoteId: quote.quoteId,
+          origin: quote.origin?.address || origin,
+          destination: quote.destination?.address || destination,
+          fee: Number(quote.feeNgn || 0),
+          distance: Number(quote.distanceKm || 0),
+          interstate: Boolean(quote.interState),
+          qualifiesForFee: Boolean(quote.qualifiesForFee),
+        });
         return;
       }
 
@@ -400,6 +449,65 @@ export default function JourneyManagementClient({
     }
   }
 
+  async function confirmSchedule() {
+    if (!pendingSchedule) return;
+
+    setSaving(true);
+    setNotice("");
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        window.location.href = "/login";
+        return;
+      }
+
+      const scheduleResponse = await fetch("/api/journeys/schedule", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          journeyId: pendingSchedule.journey.id,
+          quoteId: pendingSchedule.quoteId,
+        }),
+      });
+
+      const scheduleResult = await scheduleResponse.json();
+
+      if (!scheduleResponse.ok || !scheduleResult.success) {
+        throw new Error(
+          scheduleResult.error || "Unable to schedule this journey."
+        );
+      }
+
+      const payment = scheduleResult.data ?? scheduleResult;
+      setPendingSchedule(null);
+      setModal(null);
+      setSelected(null);
+      await loadJourneys(true);
+
+      setNotice(
+        payment.payment_status === "paid"
+          ? `✅ Journey scheduled. Fee charged: ₦${(Number(payment.amount_minor) / 100).toLocaleString("en-NG")}. Reference: ${payment.reference || "Confirmed"}.`
+          : "✅ Journey scheduled successfully. No wallet fee was charged."
+      );
+    } catch (err) {
+      console.error("Journey scheduling failed:", err);
+      setNotice(
+        err instanceof Error
+          ? err.message
+          : "Unable to schedule this journey. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
   function updateSelectedGps(enabled: boolean) {
     if (!selected) return;
 
@@ -700,6 +808,107 @@ export default function JourneyManagementClient({
         </div>
       )}
 
+      {/* Verified Route Scheduling Confirmation */}
+      {pendingSchedule && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#071D49]/75 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="schedule-confirm-title"
+            className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl"
+          >
+            <div className="bg-[#071D49] px-6 py-5 text-white">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-2xl">
+                  🛣️
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-orange-300">
+                    Route verified
+                  </p>
+                  <h3 id="schedule-confirm-title" className="text-lg font-extrabold">
+                    Confirm journey schedule
+                  </h3>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 p-6">
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <div className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                  From
+                </div>
+                <p className="mt-1 text-sm font-bold text-slate-800">
+                  {pendingSchedule.origin}
+                </p>
+                <div className="my-3 border-t border-dashed border-slate-300" />
+                <div className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                  To
+                </div>
+                <p className="mt-1 text-sm font-bold text-slate-800">
+                  {pendingSchedule.destination}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <p className="text-xs font-bold text-slate-500">Route distance</p>
+                  <p className="mt-1 text-xl font-extrabold text-[#071D49]">
+                    {pendingSchedule.distance.toFixed(2)} km
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <p className="text-xs font-bold text-slate-500">Route type</p>
+                  <p className="mt-1 text-base font-extrabold text-[#071D49]">
+                    {pendingSchedule.interstate ? "Inter-state" : "Intra-state"}
+                  </p>
+                  <p className="text-xs text-slate-500">Verified route</p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-orange-800">
+                  Journey wallet fee
+                </p>
+                <p className="mt-1 text-2xl font-extrabold text-[#071D49]">
+                  {pendingSchedule.qualifiesForFee
+                    ? `₦${pendingSchedule.fee.toLocaleString("en-NG")}`
+                    : "₦0"}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                  {pendingSchedule.qualifiesForFee
+                    ? "This fee will be charged when you confirm scheduling."
+                    : "No scheduling fee applies to this verified route."}
+                </p>
+              </div>
+
+              <p className="text-sm leading-relaxed text-slate-600">
+                Confirm below to schedule this journey. Any applicable fee will be
+                processed securely.
+              </p>
+
+              <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setPendingSchedule(null)}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-extrabold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void confirmSchedule()}
+                  className="flex-1 rounded-xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white shadow-lg transition hover:bg-[#102E6B] disabled:opacity-50"
+                >
+                  {saving ? "Scheduling…" : "✓ Confirm & Schedule"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Privacy Banner */}
       <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4">
         <span className="text-lg">🛡️</span>

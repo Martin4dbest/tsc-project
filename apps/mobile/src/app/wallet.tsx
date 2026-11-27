@@ -15,6 +15,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import WalletFunding from "../components/wallet/wallet-funding";
 
+import WalletNotifications from "../components/wallet/wallet-notifications";
 type Wallet = {
   id: string;
   balance_minor: number;
@@ -266,6 +267,7 @@ export default function WalletScreen() {
               </View>
 
               <WalletFunding walletActive={wallet.status === "active"} onWalletUpdated={() => void loadWallet(true)} />
+              <WalletNotifications />
 
               <View style={styles.summaryHeading}>
                 <Text style={styles.sectionTitle}>Wallet overview</Text>

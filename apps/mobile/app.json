@@ -22,8 +22,6 @@
       "predictiveBackGestureEnabled": true,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
@@ -45,7 +43,8 @@
         {
           "locationWhenInUsePermission": "Allow TSC to share your location during an active journey when you choose to enable GPS tracking."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

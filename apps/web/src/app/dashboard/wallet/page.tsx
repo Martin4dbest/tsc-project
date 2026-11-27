@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import WalletFunding from "@/components/wallet/wallet-funding";
 
+import WalletNotifications from "./wallet-notifications";
 export const metadata = {
   title: "My Wallet | TSC",
   description: "View your TSC wallet balance and transaction history.",
@@ -177,6 +178,7 @@ export default async function TravellerWalletPage() {
         {wallet && (
           <div className="rounded-2xl border border-[#1D4ED8]/15 bg-white p-4 shadow-2xs sm:p-5">
             <WalletFunding walletActive={wallet.status === "active"} />
+            <WalletNotifications />
           </div>
         )}
 
