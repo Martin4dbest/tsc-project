@@ -4,7 +4,10 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { signOut } from "@/app/actions";
-import { getJourneyMonitoringData, getLiveGpsMonitoringData } from "./journey-actions";
+import {
+  getJourneyMonitoringData,
+  getLiveGpsMonitoringData,
+} from "./journey-actions";
 import JourneyMonitoringClient from "./JourneyMonitoringClient";
 
 export const instant = false;
@@ -95,6 +98,10 @@ export default async function JourneyMonitoringPage() {
             aria-current="page"
           >
             <span>⌖</span> Journey Monitoring
+          </a>
+
+          <a href="/admin/journeys/fees" className="tsc-nav-link">
+            <span>₦</span> Journey Fee Settings
           </a>
 
           {isSuperAdmin && (
