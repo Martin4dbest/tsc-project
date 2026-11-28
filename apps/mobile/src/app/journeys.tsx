@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import JourneyGpsControls from '../components/JourneyGpsControls';
+import JourneyActionPopup from '../components/JourneyActionPopup';
 
 type JourneyStatus = 'draft' | 'scheduled' | 'active' | 'completed' | 'cancelled';
 type Filter = 'all' | 'upcoming' | 'active' | 'completed';
