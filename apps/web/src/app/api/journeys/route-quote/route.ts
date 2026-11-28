@@ -10,54 +10,125 @@ type GeocodedPlace = {
 };
 
 async function geocodeAddress(address: string): Promise<GeocodedPlace | null> {
-  const url = new URL("https://nominatim.openstreetmap.org/search");
-  url.searchParams.set("q", address);
-  url.searchParams.set("format", "jsonv2");
-  url.searchParams.set("addressdetails", "1");
-  url.searchParams.set("limit", "1");
-  url.searchParams.set("countrycodes", "ng");
+  const queries = [address, `${address}, Nigeria`];
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      "User-Agent":
-        process.env.TSC_NOMINATIM_USER_AGENT ||
-        "TSC-Journey-Route-Verification/1.0",
-      Accept: "application/json",
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(15000),
-  });
+  for (const query of queries) {
+    const url = new URL("https://nominatim.openstreetmap.org/search");
+    url.searchParams.set("q", query);
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("addressdetails", "1");
+    url.searchParams.set("limit", "5");
+    url.searchParams.set("countrycodes", "ng");
 
-  if (!response.ok) {
-    throw new Error("Address verification service is unavailable.");
+    try {
+      const response = await fetch(url.toString(), {
+        headers: {
+          "User-Agent":
+            process.env.TSC_NOMINATIM_USER_AGENT ||
+            "TSC-Journey-Route-Verification/1.0",
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (response.ok) {
+        const results = (await response.json()) as Array<{
+          lat: string;
+          lon: string;
+          display_name: string;
+          address?: { state?: string; region?: string };
+        }>;
+
+        for (const result of results) {
+          const lat = Number(result.lat);
+          const lon = Number(result.lon);
+
+          if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            return {
+              lat,
+              lon,
+              state: result.address?.state || result.address?.region || "",
+              display_name: result.display_name,
+            };
+          }
+        }
+      }
+    } catch {
+      // Continue to the next query/provider.
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1100));
   }
 
-  const results = (await response.json()) as Array<{
-    lat: string;
-    lon: string;
-    display_name: string;
-    address?: {
-      state?: string;
-      region?: string;
-    };
-  }>;
+  // Photon fallback.
+  for (const query of queries) {
+    const url = new URL("https://photon.komoot.io/api/");
+    url.searchParams.set("q", query);
+    url.searchParams.set("limit", "5");
+    url.searchParams.set("lang", "en");
 
-  const first = results[0];
-  if (!first) return null;
+    try {
+      const response = await fetch(url.toString(), {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(15000),
+      });
 
-  const lat = Number(first.lat);
-  const lon = Number(first.lon);
+      if (!response.ok) continue;
 
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return null;
+      const result = (await response.json()) as {
+        features?: Array<{
+          geometry?: { coordinates?: number[] };
+          properties?: {
+            name?: string;
+            street?: string;
+            city?: string;
+            county?: string;
+            state?: string;
+            country?: string;
+          };
+        }>;
+      };
+
+      for (const feature of result.features || []) {
+        const coordinates = feature.geometry?.coordinates;
+        const properties = feature.properties;
+
+        if (!coordinates || !properties) continue;
+
+        const [lon, lat] = coordinates;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+        if (
+          properties.country &&
+          !properties.country.toLowerCase().includes("nigeria")
+        ) {
+          continue;
+        }
+
+        return {
+          lat,
+          lon,
+          state: properties.state || "",
+          display_name: [
+            properties.name,
+            properties.street,
+            properties.city,
+            properties.county,
+            properties.state,
+            properties.country,
+          ]
+            .filter(Boolean)
+            .join(", "),
+        };
+      }
+    } catch {
+      // Continue to the next query.
+    }
   }
 
-  return {
-    lat,
-    lon,
-    state: first.address?.state || first.address?.region || "",
-    display_name: first.display_name,
-  };
+  return null;
 }
 
 async function getDrivingDistanceMeters(
@@ -88,7 +159,7 @@ async function getDrivingDistanceMeters(
 
   const distance = result.routes[0].distance;
 
-  if (!Number.isFinite(distance) || distance < 0) {
+  if (!Number.isFinite(distance) || distance <= 0) {
     throw new Error("Invalid driving distance returned.");
   }
 
@@ -99,7 +170,7 @@ export async function POST(request: Request) {
   try {
     const admin = createSupabaseAdminClient();
 
-    // Support mobile Bearer-token authentication.
+    // Mobile Bearer-token authentication.
     const authorization = request.headers.get("authorization");
     const bearerToken = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
 
@@ -120,7 +191,7 @@ export async function POST(request: Request) {
 
       user = tokenUser;
     } else {
-      // Preserve cookie-based authentication for web clients.
+      // Web cookie authentication.
       const supabase = await createSupabaseServerClient();
 
       const {
@@ -171,9 +242,109 @@ export async function POST(request: Request) {
       );
     }
 
+    const expiresAt = new Date(
+      Date.now() + 15 * 60 * 1000
+    ).toISOString();
+
+    const settingsSnapshot = {
+      enabled: settings.enabled,
+      interstate_enabled: settings.interstate_enabled,
+      fee_ngn: Number(settings.fee_ngn),
+      intra_state_threshold_km: Number(settings.intra_state_threshold_km),
+    };
+
+    /*
+     * NO-FEE MODE:
+     * Do not depend on external geocoding or routing.
+     * The SQL RPC explicitly permits these placeholders only while
+     * fee collection is disabled.
+     */
+    if (!settings.enabled) {
+      const { data: quote, error: quoteError } = await admin
+        .from("tsc_journey_route_quotes")
+        .insert({
+          traveller_id: user.id,
+          origin_input: originAddress,
+          destination_input: destinationAddress,
+
+          origin_verified_address: originAddress,
+          destination_verified_address: destinationAddress,
+
+          origin_state: "UNVERIFIED",
+          destination_state: "UNVERIFIED",
+
+          origin_latitude: 0,
+          origin_longitude: 0,
+          destination_latitude: 0,
+          destination_longitude: 0,
+
+          distance_meters: 0,
+          inter_state: false,
+          fee_required: false,
+          fee_ngn: 0,
+
+          settings_snapshot: {
+            ...settingsSnapshot,
+            route_verified: false,
+            fee_disabled_scheduling: true,
+          },
+
+          expires_at: expiresAt,
+        })
+        .select("id")
+        .single();
+
+      if (quoteError || !quote) {
+        console.error("No-fee route quote storage error:", quoteError);
+
+        return NextResponse.json(
+          { error: "Unable to create scheduling quote." },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        verified: true,
+        routeVerified: false,
+        quoteId: quote.id,
+        expiresAt,
+
+        origin: {
+          address: originAddress,
+          state: null,
+          latitude: null,
+          longitude: null,
+        },
+
+        destination: {
+          address: destinationAddress,
+          state: null,
+          latitude: null,
+          longitude: null,
+        },
+
+        distanceMeters: 0,
+        distanceKm: 0,
+        distance_km: 0,
+        interState: false,
+        inter_state: false,
+        qualifiesForFee: false,
+        feeRequired: false,
+        feeNgn: 0,
+        fee_ngn: 0,
+        amount_ngn: 0,
+        amount: 0,
+        reason: "fee_disabled",
+      });
+    }
+
+    /*
+     * FEE-ENABLED MODE:
+     * Require full route verification and distance calculation.
+     */
     const origin = await geocodeAddress(originAddress);
 
-    // Respect Nominatim's public-service request rate.
+    // Respect public Nominatim request rate.
     await new Promise((resolve) => setTimeout(resolve, 1100));
 
     const destination = await geocodeAddress(destinationAddress);
@@ -210,10 +381,6 @@ export async function POST(request: Request) {
 
     const feeNgn = qualifiesForFee ? Number(settings.fee_ngn) : 0;
 
-    const expiresAt = new Date(
-      Date.now() + 15 * 60 * 1000
-    ).toISOString();
-
     const { data: quote, error: quoteError } = await admin
       .from("tsc_journey_route_quotes")
       .insert({
@@ -239,12 +406,8 @@ export async function POST(request: Request) {
         fee_ngn: feeNgn,
 
         settings_snapshot: {
-          enabled: settings.enabled,
-          interstate_enabled: settings.interstate_enabled,
-          fee_ngn: Number(settings.fee_ngn),
-          intra_state_threshold_km: Number(
-            settings.intra_state_threshold_km
-          ),
+          ...settingsSnapshot,
+          route_verified: true,
         },
 
         expires_at: expiresAt,
@@ -263,6 +426,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       verified: true,
+      routeVerified: true,
       quoteId: quote.id,
       expiresAt,
 
@@ -282,9 +446,15 @@ export async function POST(request: Request) {
 
       distanceMeters: Math.round(distanceMeters),
       distanceKm: Number(distanceKm.toFixed(2)),
+      distance_km: Number(distanceKm.toFixed(2)),
       interState,
+      inter_state: interState,
       qualifiesForFee,
+      feeRequired: qualifiesForFee,
       feeNgn,
+      fee_ngn: feeNgn,
+      amount_ngn: feeNgn,
+      amount: feeNgn,
 
       reason: interState
         ? "inter_state"
@@ -296,7 +466,12 @@ export async function POST(request: Request) {
     console.error("Journey route verification error:", error);
 
     return NextResponse.json(
-      { error: "Unable to verify route right now. Please try again." },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to verify route right now. Please try again.",
+      },
       { status: 502 }
     );
   }
