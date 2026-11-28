@@ -411,26 +411,20 @@ export default function JourneysScreen() {
 
               if (!confirmed) return;
 
-              const scheduleResponse = await fetch(`${API_BASE}/api/journeys/schedule`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify({
-                  journeyId: journey.id,
-                  quoteId: quote.quoteId,
-                }),
-              });
+              const { data: scheduleResult, error: scheduleError } = await supabase.rpc(
+                'tsc_schedule_journey_with_fee',
+                {
+                  p_journey_id: journey.id,
+                  p_quote_id: quote.quoteId,
+                }
+              );
 
-              const scheduleResult = await scheduleResponse.json();
+              if (scheduleError) {
+                throw new Error(scheduleError.message);
+              }
 
-              if (!scheduleResponse.ok || !scheduleResult.success) {
-                throw new Error(
-                  scheduleResult.error ||
-                    scheduleResult.message ||
-                    'Journey scheduling failed.'
-                );
+              if (!scheduleResult?.success) {
+                throw new Error('Journey scheduling and fee payment failed.');
               }
 
               setModal(null);
