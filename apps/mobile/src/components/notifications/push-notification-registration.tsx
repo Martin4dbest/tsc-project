@@ -17,7 +17,7 @@ Notifications.setNotificationHandler({
 
 export default function PushNotificationRegistration() {
   const router = useRouter();
-  const isAndroidExpoGo = Platform.OS === "android" && (Constants.appOwnership === "expo" || Constants.executionEnvironment === "storeClient");
+  const isAndroidExpoGo = Platform.OS === "android" && __DEV__;
 
   useEffect(() => {
     if (isAndroidExpoGo) {
