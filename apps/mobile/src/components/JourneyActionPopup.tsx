@@ -23,11 +23,11 @@ type Props = {
   onConfirm: () => void;
 };
 
-const ACTION_COLORS = {
-  schedule: '#3B82F6',
-  start: '#10B981',
-  complete: '#8B5CF6',
-  cancel: '#EF4444',
+const COLORS = {
+  schedule: '#F5B942',
+  start: '#34D399',
+  complete: '#A78BFA',
+  cancel: '#F87171',
 };
 
 export default function JourneyActionPopup({
@@ -44,116 +44,89 @@ export default function JourneyActionPopup({
   onCancel,
   onConfirm,
 }: Props) {
-  const accent = ACTION_COLORS[actionType];
+  const accent = COLORS[actionType];
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      onRequestClose={onCancel}
-    >
+    <Modal transparent visible={visible} animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
       <View style={styles.overlay}>
-        <View style={styles.popup}>
-          <View style={[styles.topAccent, { backgroundColor: accent }]} />
+        <View style={styles.card}>
+          <View style={[styles.topLine, { backgroundColor: accent }]} />
 
-          <View style={styles.header}>
-            <View style={[styles.iconCircle, { backgroundColor: `${accent}18` }]}>
-              <Text style={styles.icon}>
-                {actionType === 'schedule'
-                  ? '📅'
-                  : actionType === 'start'
-                  ? '🚀'
-                  : actionType === 'complete'
-                  ? '🏁'
-                   : '⚠️'}
-              </Text>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.brand}>TSC</Text>
+              <Text style={styles.brandSub}>TRAVELLERS SAFETY COVERED</Text>
             </View>
-
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.message}>{message}</Text>
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>SECURE</Text>
+            </View>
           </View>
+
+          <View style={[styles.iconBox, { borderColor: `${accent}55` }]}>
+            <Text style={[styles.icon, { color: accent }]}>
+              {actionType === 'schedule' ? '✦' : actionType === 'start' ? '▶' : actionType === 'complete' ? '✓' : '!'}
+            </Text>
+          </View>
+
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.message}>{message}</Text>
 
           {(origin || destination) && (
             <View style={styles.routeCard}>
+              <Text style={styles.sectionLabel}>JOURNEY ROUTE</Text>
               <View style={styles.routePoint}>
                 <View style={styles.originDot} />
-                <View style={styles.routeText}>
-                  <Text style={styles.routeLabel}>ORIGIN</Text>
-                  <Text style={styles.routeValue} numberOfLines={3}>
-                    {origin || 'Origin'}
-                  </Text>
+                <View style={styles.pointText}>
+                  <Text style={styles.pointLabel}>FROM</Text>
+                  <Text style={styles.pointValue}>{origin || 'Origin'}</Text>
                 </View>
               </View>
-
-              <View style={styles.routeConnector}>
+              <View style={styles.connector}>
                 <View style={styles.connectorLine} />
-                <Text style={styles.connectorIcon}>↓</Text>
+                <Text style={styles.connectorArrow}>↓</Text>
               </View>
-
               <View style={styles.routePoint}>
                 <View style={styles.destinationDot} />
-                <View style={styles.routeText}>
-                  <Text style={styles.routeLabel}>DESTINATION</Text>
-                  <Text style={styles.routeValue} numberOfLines={3}>
-                    {destination || 'Destination'}
-                  </Text>
+                <View style={styles.pointText}>
+                  <Text style={styles.pointLabel}>TO</Text>
+                  <Text style={styles.pointValue}>{destination || 'Destination'}</Text>
                 </View>
               </View>
             </View>
           )}
 
           {(fee !== undefined || distance !== undefined) && (
-            <View style={styles.infoRow}>
-              {distance !== undefined && distance !== null && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>DISTANCE</Text>
-                  <Text style={styles.infoValue}>{distance} km</Text>
+            <View style={styles.metrics}>
+              {distance != null && (
+                <View style={styles.metric}>
+                  <Text style={styles.metricLabel}>DISTANCE</Text>
+                  <Text style={styles.metricValue}>{distance} km</Text>
                 </View>
               )}
               {fee !== undefined && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>SCHEDULING FEE</Text>
-                  <Text style={styles.feeValue}>
-                    ₦{Number(fee).toLocaleString()}
-                  </Text>
+                <View style={[styles.metric, styles.feeMetric]}>
+                  <Text style={styles.metricLabel}>SCHEDULING FEE</Text>
+                  <Text style={styles.feeValue}>₦{Number(fee).toLocaleString()}</Text>
                 </View>
               )}
             </View>
           )}
 
           <View style={styles.actions}>
-            <Pressable
-              onPress={onCancel}
-              disabled={loading}
-              style={({ pressed }) => [
-                styles.cancelButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={styles.cancelText}>Go Back</Text>
+            <Pressable style={styles.cancelButton} onPress={onCancel} disabled={loading}>
+              <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
-
             <Pressable
+              style={[styles.confirmButton, { backgroundColor: accent }, loading && styles.disabled]}
               onPress={onConfirm}
               disabled={loading}
-              style={({ pressed }) => [
-                styles.confirmButton,
-                { backgroundColor: accent },
-                pressed && styles.pressed,
-                loading && styles.disabled,
-              ]}
             >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.confirmText}>{actionLabel}</Text>
-              )}
+              {loading ? <ActivityIndicator color="#08172E" /> : <Text style={styles.confirmText}>{actionLabel}  →</Text>}
             </Pressable>
           </View>
 
-          <Text style={styles.footer}>TSC · TRAVELLERS SAFETY COVERED</Text>
+          <Text style={styles.footer}>YOUR JOURNEY. OUR PRIORITY.</Text>
         </View>
       </View>
     </Modal>
@@ -163,196 +136,85 @@ export default function JourneyActionPopup({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(3, 12, 32, 0.72)',
+    backgroundColor: 'rgba(2,8,23,0.82)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 22,
+    padding: 20,
   },
-  popup: {
+  card: {
     width: '100%',
     maxWidth: 440,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
+    backgroundColor: '#0B1730',
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: '#263956',
     overflow: 'hidden',
+    paddingBottom: 20,
     elevation: 24,
     shadowColor: '#000',
-    shadowOpacity: 0.24,
-    shadowRadius: 24,
+    shadowOpacity: 0.4,
+    shadowRadius: 25,
     shadowOffset: { width: 0, height: 12 },
   },
-  topAccent: {
-    height: 5,
-    width: '100%',
-  },
-  header: {
+  topLine: { height: 4 },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 26,
-    paddingBottom: 22,
+    marginHorizontal: 22,
+    marginTop: 20,
   },
-  iconCircle: {
-    width: 66,
-    height: 66,
-    borderRadius: 22,
+  brand: { color: '#FFFFFF', fontSize: 16, fontWeight: '900', letterSpacing: 1.2 },
+  brandSub: { color: '#8094B2', fontSize: 8, fontWeight: '800', letterSpacing: 1.1, marginTop: 3 },
+  liveBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  icon: {
-    fontSize: 30,
-  },
-  title: {
-    fontSize: 23,
-    fontWeight: '900',
-    color: '#071D49',
-    textAlign: 'center',
-  },
-  message: {
-    color: '#64748B',
-    fontSize: 15,
-    lineHeight: 23,
-    textAlign: 'center',
-    marginTop: 9,
-  },
-  routeCard: {
-    backgroundColor: '#F5F8FC',
-    marginHorizontal: 20,
-    padding: 18,
-    borderRadius: 20,
+    gap: 6,
+    backgroundColor: '#142740',
+    borderColor: '#2C4562',
     borderWidth: 1,
-    borderColor: '#E5ECF5',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
-  routePoint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 13,
-  },
-  originDot: {
-    width: 13,
-    height: 13,
-    borderRadius: 7,
-    backgroundColor: '#10B981',
-    borderWidth: 3,
-    borderColor: '#D1FAE5',
-  },
-  destinationDot: {
-    width: 13,
-    height: 13,
-    borderRadius: 7,
-    backgroundColor: '#F28C28',
-    borderWidth: 3,
-    borderColor: '#FFEDD5',
-  },
-  routeText: {
-    flex: 1,
-  },
-  routeLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#94A3B8',
-    letterSpacing: 1.3,
-  },
-  routeValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#102E6B',
-    marginTop: 4,
-    lineHeight: 23,
-  },
-  routeConnector: {
-    height: 31,
-    marginLeft: 5,
-    justifyContent: 'center',
-  },
-  connectorLine: {
-    position: 'absolute',
-    height: 24,
-    width: 2,
-    backgroundColor: '#CBD5E1',
-    left: 0,
-    top: 0,
-  },
-  connectorIcon: {
-    fontSize: 13,
-    color: '#94A3B8',
-    position: 'absolute',
-    left: -5,
-    bottom: 0,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    marginTop: 16,
-    gap: 10,
-  },
-  infoItem: {
-    flex: 1,
-    backgroundColor: '#FFF7ED',
-    borderRadius: 16,
-    padding: 14,
-  },
-  infoLabel: {
-    color: '#9A6700',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  infoValue: {
-    color: '#172536',
-    fontSize: 19,
-    fontWeight: '900',
-    marginTop: 6,
-  },
-  feeValue: {
-    color: '#C2410C',
-    fontSize: 19,
-    fontWeight: '900',
-    marginTop: 6,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingTop: 24,
-  },
-  cancelButton: {
-    flex: 1,
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: '#F1F5F9',
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#34D399' },
+  liveText: { color: '#B8C8DB', fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  iconBox: {
+    alignSelf: 'center',
+    marginTop: 22,
+    width: 64,
+    height: 64,
+    borderRadius: 21,
+    borderWidth: 1,
+    backgroundColor: '#14233B',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cancelText: {
-    color: '#475569',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  confirmButton: {
-    flex: 1.4,
-    height: 54,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  pressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.98 }],
-  },
-  disabled: {
-    opacity: 0.65,
-  },
-  footer: {
-    textAlign: 'center',
-    color: '#94A3B8',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    paddingVertical: 19,
-  },
+  icon: { fontSize: 28, fontWeight: '900' },
+  title: { color: '#F8FAFC', fontSize: 23, fontWeight: '900', textAlign: 'center', marginTop: 17, marginHorizontal: 22 },
+  message: { color: '#9EB0C8', fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8, marginHorizontal: 24, marginBottom: 20 },
+  routeCard: { marginHorizontal: 20, padding: 16, borderRadius: 18, backgroundColor: '#101F38', borderWidth: 1, borderColor: '#283B57' },
+  sectionLabel: { color: '#8095B2', fontSize: 9, fontWeight: '900', letterSpacing: 1.4, marginBottom: 16 },
+  routePoint: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  originDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#34D399', borderWidth: 3, borderColor: '#1C473C' },
+  destinationDot: { width: 14, height: 14, borderRadius: 4, backgroundColor: '#F5B942', borderWidth: 3, borderColor: '#544321' },
+  pointText: { flex: 1 },
+  pointLabel: { color: '#8095B2', fontSize: 9, fontWeight: '900', letterSpacing: 1.2, marginBottom: 4 },
+  pointValue: { color: '#F1F5F9', fontSize: 14, fontWeight: '800', lineHeight: 20 },
+  connector: { height: 27, marginLeft: 6, justifyContent: 'center' },
+  connectorLine: { height: 19, width: 1, backgroundColor: '#3B506E' },
+  connectorArrow: { position: 'absolute', left: -6, bottom: -2, color: '#8EA4C0', fontSize: 12 },
+  metrics: { flexDirection: 'row', gap: 10, marginHorizontal: 20, marginTop: 12 },
+  metric: { flex: 1, backgroundColor: '#101F38', borderRadius: 15, borderWidth: 1, borderColor: '#283B57', padding: 13 },
+  feeMetric: { borderColor: '#51432C', backgroundColor: '#191F31' },
+  metricLabel: { color: '#8195B1', fontSize: 9, fontWeight: '900', letterSpacing: 0.7 },
+  metricValue: { color: '#F1F5F9', fontSize: 20, fontWeight: '900', marginTop: 6 },
+  feeValue: { color: '#F5B942', fontSize: 17, fontWeight: '900', marginTop: 6 },
+  actions: { flexDirection: 'row', gap: 10, marginHorizontal: 20, marginTop: 20 },
+  cancelButton: { flex: 0.8, minHeight: 50, borderRadius: 14, backgroundColor: '#14243D', borderWidth: 1, borderColor: '#354963', alignItems: 'center', justifyContent: 'center' },
+  cancelText: { color: '#C1CDDD', fontSize: 14, fontWeight: '800' },
+  confirmButton: { flex: 1.3, minHeight: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  confirmText: { color: '#07162D', fontSize: 14, fontWeight: '900' },
+  disabled: { opacity: 0.6 },
+  footer: { color: '#7085A1', fontSize: 8, fontWeight: '900', letterSpacing: 1.2, textAlign: 'center', marginTop: 19 },
 });

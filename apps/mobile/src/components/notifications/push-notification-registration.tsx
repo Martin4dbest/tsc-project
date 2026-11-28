@@ -17,9 +17,10 @@ Notifications.setNotificationHandler({
 
 export default function PushNotificationRegistration() {
   const router = useRouter();
+  const isAndroidExpoGo = Platform.OS === "android" && Constants.executionEnvironment === "storeClient";
 
   useEffect(() => {
-    if (__DEV__ && Platform.OS === "android") {
+    if (isAndroidExpoGo) {
       console.log("TSC: Push registration disabled in Android development/Expo Go.");
       return;
     }

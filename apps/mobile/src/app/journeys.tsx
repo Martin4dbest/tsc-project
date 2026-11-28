@@ -124,6 +124,15 @@ export default function JourneysScreen() {
   const [selected, setSelected] = useState<Journey | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [scheduleConfirmation, setScheduleConfirmation] = useState<{
+    journey: Journey;
+    quoteId: string;
+    fee: number;
+    distance: number | null;
+    origin: string;
+    destination: string;
+  } | null>(null);
+
 
   const loadJourneys = useCallback(
     async (quiet = false) => {
@@ -339,6 +348,75 @@ export default function JourneysScreen() {
 
     const API_BASE = 'https://www.tscglobalmobility.com';
 
+    if (status === 'scheduled') {
+      setSaving(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session) {
+          router.replace('/login');
+          return;
+        }
+
+        const origin =
+          journey.origin_address?.trim() || journey.origin_name.trim();
+        const destination =
+          journey.destination_address?.trim() ||
+          journey.destination_name.trim();
+
+        const quoteResponse = await fetch(
+          `${API_BASE}/api/journeys/route-quote`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ origin, destination }),
+          }
+        );
+
+        const quote = await quoteResponse.json();
+
+        if (!quoteResponse.ok || !quote.verified || !quote.quoteId) {
+          throw new Error(
+            quote.error || 'Unable to verify this journey route.'
+          );
+        }
+
+        const fee =
+          quote.fee_ngn ??
+          quote.feeNgn ??
+          quote.amount_ngn ??
+          quote.amount ??
+          0;
+
+        const distance =
+          quote.distance_km ??
+          quote.distanceKm ??
+          quote.distance ??
+          null;
+
+        setScheduleConfirmation({
+          journey,
+          quoteId: quote.quoteId,
+          fee: Number(fee),
+          distance: distance === null ? null : Number(distance),
+          origin,
+          destination,
+        });
+      } catch (err: any) {
+        console.error('Journey route verification failed:', err);
+        Alert.alert(
+          'Unable to schedule',
+          err?.message || 'Unable to verify this journey route.'
+        );
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     Alert.alert('Confirm action', messages[status] || 'Update this journey?', [
       { text: 'Go back', style: 'cancel' },
       {
@@ -351,95 +429,6 @@ export default function JourneysScreen() {
 
             if (!session) {
               router.replace('/login');
-              return;
-            }
-
-            if (status === 'scheduled') {
-              const origin = journey.origin_address?.trim() || journey.origin_name.trim();
-              const destination =
-                journey.destination_address?.trim() || journey.destination_name.trim();
-
-              const quoteResponse = await fetch(`${API_BASE}/api/journeys/route-quote`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify({ origin, destination }),
-              });
-
-              const quote = await quoteResponse.json();
-
-              if (!quoteResponse.ok || !quote.verified || !quote.quoteId) {
-                throw new Error(quote.error || 'Unable to verify this journey route.');
-              }
-
-              const fee =
-                quote.fee_ngn ??
-                quote.feeNgn ??
-                quote.amount_ngn ??
-                quote.amount ??
-                0;
-
-              const distance =
-                quote.distance_km ??
-                quote.distanceKm ??
-                quote.distance ??
-                null;
-
-              const routeDescription = quote.routeDescription || `${origin} → ${destination}`;
-
-              const confirmed = await new Promise<boolean>((resolve) => {
-                Alert.alert(
-                  'Confirm journey schedule',
-                  [
-                    routeDescription,
-                    '',
-                    distance !== null ? `Distance: ${distance} km` : null,
-                    `Scheduling fee: ₦${Number(fee).toLocaleString()}`,
-                    '',
-                    'Proceed with scheduling this journey?',
-                  ]
-                    .filter(Boolean)
-                    .join('\n'),
-                  [
-                    { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-                    { text: 'Schedule', onPress: () => resolve(true) },
-                  ],
-                  { cancelable: true, onDismiss: () => resolve(false) }
-                );
-              });
-
-              if (!confirmed) return;
-
-              const scheduleResponse = await fetch(`${API_BASE}/api/journeys/schedule`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify({
-                  journeyId: journey.id,
-                  quoteId: quote.quoteId,
-                }),
-              });
-
-              const scheduleResult = await scheduleResponse.json();
-
-              if (!scheduleResponse.ok || !scheduleResult.success) {
-                throw new Error(
-                  scheduleResult.error || 'Unable to schedule this journey.'
-                );
-              }
-
-              setModal(null);
-              setSelected(null);
-              await loadJourneys(true);
-
-              Alert.alert(
-                'Journey scheduled!',
-                `Your journey has been scheduled.\n\n${origin} → ${destination}\nFee: ₦${Number(fee).toLocaleString()}`
-              );
               return;
             }
 
@@ -472,6 +461,66 @@ export default function JourneysScreen() {
       },
     ]);
   };
+
+  const confirmScheduleJourney = async () => {
+    if (!scheduleConfirmation) return;
+
+    setSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        setScheduleConfirmation(null);
+        router.replace('/login');
+        return;
+      }
+
+      const response = await fetch(
+        'https://www.tscglobalmobility.com/api/journeys/schedule',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            journeyId: scheduleConfirmation.journey.id,
+            quoteId: scheduleConfirmation.quoteId,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.error || 'Unable to schedule this journey.'
+        );
+      }
+
+      const { origin, destination, fee } = scheduleConfirmation;
+
+      setScheduleConfirmation(null);
+      setModal(null);
+      setSelected(null);
+
+      await loadJourneys(true);
+
+      Alert.alert(
+        'Journey scheduled!',
+        `Your journey has been scheduled.\n\n${origin} → ${destination}\nFee: ₦${Number(fee).toLocaleString()}`
+      );
+    } catch (err: any) {
+      console.error('Journey scheduling failed:', err);
+      Alert.alert(
+        'Action unsuccessful',
+        err?.message || 'This status change could not be completed.'
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const openDetails = (journey: Journey) => {
     setSelected(journey);
     setModal('details');
@@ -999,6 +1048,20 @@ export default function JourneysScreen() {
           )}
         </SafeAreaView>
       </Modal>
+      <JourneyActionPopup
+        visible={!!scheduleConfirmation}
+        title="Confirm journey schedule"
+        message="Review your route and scheduling fee before confirming."
+        origin={scheduleConfirmation?.origin}
+        destination={scheduleConfirmation?.destination}
+        fee={scheduleConfirmation?.fee}
+        distance={scheduleConfirmation?.distance}
+        actionLabel="Schedule Journey"
+        actionType="schedule"
+        loading={saving}
+        onCancel={() => setScheduleConfirmation(null)}
+        onConfirm={confirmScheduleJourney}
+      />
     </SafeAreaView>
   );
 }
