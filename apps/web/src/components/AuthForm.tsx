@@ -24,6 +24,7 @@ export default function AuthForm({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -67,7 +68,9 @@ export default function AuthForm({
             profile.account_status !== "active"
           ) {
             await supabase.auth.signOut();
-            throw new Error("This registration is not available for this account.");
+            throw new Error(
+              "This registration is not available for this account."
+            );
           }
 
           router.replace("/dashboard");
@@ -234,16 +237,80 @@ export default function AuthForm({
           />
 
           <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            autoComplete={isRegister ? "new-password" : "current-password"}
-            placeholder={isRegister ? "Create a password" : "Enter your password"}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            minLength={6}
-            required
-          />
+          <div style={{ position: "relative", width: "100%" }}>
+            <input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete={isRegister ? "new-password" : "current-password"}
+              placeholder={
+                isRegister ? "Create a password" : "Enter your password"
+              }
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              minLength={6}
+              required
+              style={{ paddingRight: "48px", width: "100%" }}
+            />
+
+            <button
+              type="button"
+              onClick={() => setShowPassword((current) => !current)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              title={showPassword ? "Hide password" : "Show password"}
+              style={{
+                position: "absolute",
+                right: "12px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "transparent",
+                border: "none",
+                padding: "6px",
+                cursor: "pointer",
+                color: "inherit",
+                zIndex: 2,
+              }}
+            >
+              {showPassword ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="21"
+                  height="21"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 3l18 18" />
+                  <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
+                  <path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c5.2 0 9 4.5 10 7a11.8 11.8 0 0 1-3.1 4.3" />
+                  <path d="M6.2 6.2C3.8 7.8 2.4 10 2 12c1 2.5 4.8 7 10 7a10 10 0 0 0 4-.8" />
+                  <path d="M8.5 8.5a5 5 0 0 0-1.2 3.3" />
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="21"
+                  height="21"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              )}
+            </button>
+          </div>
 
           <button type="submit" disabled={loading} className="auth-submit">
             {loading
