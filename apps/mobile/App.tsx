@@ -137,7 +137,6 @@ export default function App() {
                 >
                   <Text style={styles.secondaryButtonText}>Log in</Text>
                 </Pressable>
-                <Text>Text</Text>
               </View>
 
               <View style={styles.routeIndicator}>
