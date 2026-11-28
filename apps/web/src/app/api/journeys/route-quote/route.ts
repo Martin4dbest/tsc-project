@@ -136,7 +136,7 @@ export async function POST(request: Request) {
 
     const { data: settings, error: settingsError } = await admin
       .from("tsc_journey_fee_settings")
-      .select("enabled,interstate_enabled,fee_ngn,intrastate_threshold_km")
+      .select("enabled,interstate_enabled,fee_ngn,intra_state_threshold_km")
       .eq("id", 1)
       .single();
 
@@ -182,7 +182,7 @@ export async function POST(request: Request) {
       settings.enabled &&
       ((interState && settings.interstate_enabled) ||
         (!interState &&
-          distanceKm > Number(settings.intrastate_threshold_km)));
+          distanceKm > Number(settings.intra_state_threshold_km)));
 
     const feeNgn = qualifiesForFee ? Number(settings.fee_ngn) : 0;
 
@@ -218,8 +218,8 @@ export async function POST(request: Request) {
           enabled: settings.enabled,
           interstate_enabled: settings.interstate_enabled,
           fee_ngn: Number(settings.fee_ngn),
-          intrastate_threshold_km: Number(
-            settings.intrastate_threshold_km
+          intra_state_threshold_km: Number(
+            settings.intra_state_threshold_km
           ),
         },
 
@@ -264,7 +264,7 @@ export async function POST(request: Request) {
 
       reason: interState
         ? "inter_state"
-        : distanceKm > Number(settings.intrastate_threshold_km)
+        : distanceKm > Number(settings.intra_state_threshold_km)
           ? "same_state_over_threshold"
           : "same_state_at_or_below_threshold",
     });
