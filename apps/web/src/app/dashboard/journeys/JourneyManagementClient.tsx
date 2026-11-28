@@ -134,6 +134,7 @@ export default function JourneyManagementClient({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [walletError, setWalletError] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
 
@@ -499,11 +500,15 @@ export default function JourneyManagementClient({
       );
     } catch (err) {
       console.error("Journey scheduling failed:", err);
-      setNotice(
-        err instanceof Error
-          ? err.message
-          : "Unable to schedule this journey. Please try again."
-      );
+      const errorMessage = err instanceof Error
+        ? err.message
+        : "Unable to schedule this journey. Please try again.";
+
+      if (errorMessage.toLowerCase().includes("insufficient wallet balance")) {
+        setWalletError(true);
+      } else {
+        setNotice(errorMessage);
+      }
     } finally {
       setSaving(false);
     }
@@ -900,9 +905,16 @@ export default function JourneyManagementClient({
                   type="button"
                   disabled={saving}
                   onClick={() => void confirmSchedule()}
-                  className="flex-1 rounded-xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white shadow-lg transition hover:bg-[#102E6B] disabled:opacity-50"
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white shadow-lg transition hover:bg-[#102E6B] disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {saving ? "Scheduling…" : "✓ Confirm & Schedule"}
+                  {saving ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    Scheduling Journey...
+                  </>
+                ) : (
+                  "Confirm & Schedule"
+                )}
                 </button>
               </div>
             </div>
@@ -1231,9 +1243,16 @@ export default function JourneyManagementClient({
                     type="button"
                     disabled={saving}
                     onClick={() => void changeStatus(selected, "scheduled")}
-                    className="flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white hover:bg-[#102E6B] disabled:opacity-50"
+                    className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#071D49] px-4 py-3 text-sm font-extrabold text-white hover:bg-[#102E6B] disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    📅 Schedule Journey
+                    {saving ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        Scheduling Journey...
+                      </>
+                    ) : (
+                      "📅 Schedule Journey"
+                    )}
                   </button>
                   <button
                     type="button"
@@ -1312,6 +1331,61 @@ export default function JourneyManagementClient({
               >
                 Close Details
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {walletError && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-[#061329]/75 p-4 backdrop-blur-md">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="wallet-error-title"
+            className="w-full max-w-md overflow-hidden rounded-3xl border border-amber-300/30 bg-white shadow-2xl"
+          >
+            <div className="bg-gradient-to-br from-[#071D49] via-[#102E6B] to-[#071D49] px-6 py-7 text-center text-white">
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-amber-300/30 bg-amber-400/10 text-4xl shadow-lg">
+                💳
+              </div>
+              <h2 id="wallet-error-title" className="mt-4 text-xl font-black tracking-tight">
+                Insufficient Wallet Balance
+              </h2>
+              <p className="mt-2 text-sm font-medium text-slate-200">
+                Your wallet needs a little boost
+              </p>
+            </div>
+
+            <div className="px-6 py-6">
+              <p className="text-center text-sm leading-6 text-slate-600">
+                Your wallet balance is insufficient to schedule this journey.
+                Fund your wallet and try again.
+              </p>
+
+              <div className="mt-6 flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWalletError(false);
+                    window.location.href = "/dashboard/wallet";
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#071D49] px-5 py-3.5 text-sm font-extrabold text-white shadow-lg transition hover:bg-[#102E6B]"
+                >
+                  💰 Fund My Wallet
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setWalletError(false)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Close
+                </button>
+              </div>
+
+              <p className="mt-4 text-center text-xs text-slate-400">
+                Your journey details are saved. You can try again after funding.
+              </p>
             </div>
           </div>
         </div>
