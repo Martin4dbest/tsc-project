@@ -19,9 +19,15 @@ export default function PushNotificationRegistration() {
   const router = useRouter();
 
   useEffect(() => {
+    if (__DEV__ && Platform.OS === "android") {
+      console.log("TSC: Push registration disabled in Android development/Expo Go.");
+      return;
+    }
+
     let mounted = true;
     const registeringUsers = new Set<string>();
     const registeredUsers = new Set<string>();
+
 
     const projectId =
       Constants.easConfig?.projectId ??
@@ -55,6 +61,7 @@ export default function PushNotificationRegistration() {
 
     async function registerPushToken(userId: string) {
       if (
+        isAndroidExpoGo ||
         !mounted ||
         registeringUsers.has(userId) ||
         registeredUsers.has(userId)
@@ -119,10 +126,15 @@ export default function PushNotificationRegistration() {
             return;
           } catch (error) {
             lastError = error;
-            console.error(`TSC push registration attempt ${attempt} failed:`, error);
+            console.error(
+              `TSC push registration attempt ${attempt} failed:`,
+              error
+            );
 
             if (attempt < 3) {
-              await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+              await new Promise((resolve) =>
+                setTimeout(resolve, 2000 * attempt)
+              );
             }
           }
         }
@@ -162,7 +174,7 @@ export default function PushNotificationRegistration() {
         return;
       }
 
-      if (data.session && mounted) {
+      if (data.session && mounted && !isAndroidExpoGo) {
         void registerPushToken(data.session.user.id);
       }
     });
@@ -174,12 +186,14 @@ export default function PushNotificationRegistration() {
       if (
         session &&
         mounted &&
+        !isAndroidExpoGo &&
         ["INITIAL_SESSION", "SIGNED_IN", "TOKEN_REFRESHED"].includes(event)
       ) {
         void registerPushToken(session.user.id);
       }
     });
 
+    // Local notification listeners remain available in Expo Go.
     const receivedListener =
       Notifications.addNotificationReceivedListener((notification) => {
         console.log(
@@ -193,27 +207,38 @@ export default function PushNotificationRegistration() {
         handleNotificationResponse(response);
       });
 
-    // Re-register the Expo token if the underlying device token changes.
-    const tokenRefreshListener = Notifications.addPushTokenListener(() => {
-      void supabase.auth.getSession().then(({ data, error }) => {
-        if (error) {
-          console.error("TSC session lookup after token refresh failed:", error);
-          return;
-        }
+    // Remote push-token listener is not supported in Android Expo Go.
+    const tokenRefreshListener = isAndroidExpoGo
+      ? null
+      : Notifications.addPushTokenListener(() => {
+          void supabase.auth.getSession().then(({ data, error }) => {
+            if (error) {
+              console.error(
+                "TSC session lookup after token refresh failed:",
+                error
+              );
+              return;
+            }
 
-        if (data.session && mounted) {
-          registeredUsers.delete(data.session.user.id);
-          void registerPushToken(data.session.user.id);
-        }
-      });
-    });
+            if (data.session && mounted) {
+              registeredUsers.delete(data.session.user.id);
+              void registerPushToken(data.session.user.id);
+            }
+          });
+        });
+
+    if (isAndroidExpoGo) {
+      console.log(
+        "TSC: Remote push registration skipped in Expo Go. Use a development build for push notifications."
+      );
+    }
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
       receivedListener.remove();
       responseListener.remove();
-      tokenRefreshListener.remove();
+      tokenRefreshListener?.remove();
     };
   }, [router]);
 

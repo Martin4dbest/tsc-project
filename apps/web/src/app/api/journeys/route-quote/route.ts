@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
-
 type GeocodedPlace = {
   lat: number;
   lon: number;
@@ -98,18 +97,45 @@ async function getDrivingDistanceMeters(
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createSupabaseServerClient();
+    const admin = createSupabaseAdminClient();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Support mobile Bearer-token authentication.
+    const authorization = request.headers.get("authorization");
+    const bearerToken = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Authentication required." },
-        { status: 401 }
-      );
+    let user = null;
+
+    if (bearerToken) {
+      const {
+        data: { user: tokenUser },
+        error: tokenAuthError,
+      } = await admin.auth.getUser(bearerToken);
+
+      if (tokenAuthError || !tokenUser) {
+        return NextResponse.json(
+          { error: "Your session is invalid or expired. Please sign in again." },
+          { status: 401 }
+        );
+      }
+
+      user = tokenUser;
+    } else {
+      // Preserve cookie-based authentication for web clients.
+      const supabase = await createSupabaseServerClient();
+
+      const {
+        data: { user: cookieUser },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError || !cookieUser) {
+        return NextResponse.json(
+          { error: "Authentication required." },
+          { status: 401 }
+        );
+      }
+
+      user = cookieUser;
     }
 
     const body = (await request.json()) as {
@@ -131,8 +157,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    const admin = createSupabaseAdminClient();
 
     const { data: settings, error: settingsError } = await admin
       .from("tsc_journey_fee_settings")
