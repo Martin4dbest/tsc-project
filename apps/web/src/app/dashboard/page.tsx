@@ -155,7 +155,6 @@ function SidebarContent({
   return (
     <div className="flex h-full flex-col justify-between bg-gradient-to-b from-[#0A1F44] via-[#091B3B] to-[#06132A] p-5 text-white">
       <div className="space-y-5">
-        {/* Brand Header */}
         <Link
           href="/"
           className="group flex items-center gap-3 rounded-2xl border border-[#F5A623]/25 bg-white/[0.05] p-3 transition hover:border-[#F5A623]/50 hover:bg-white/[0.08]"
@@ -173,7 +172,6 @@ function SidebarContent({
           </div>
         </Link>
 
-        {/* Traveller Profile Card */}
         <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-3.5">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-300/40 bg-[#187B83] text-xs font-black text-white shadow-2xs">
@@ -191,7 +189,6 @@ function SidebarContent({
           </div>
         </div>
 
-        {/* Navigation */}
         <nav aria-label="Quick Access" className="space-y-1.5">
           <div className="flex items-center justify-between px-2 pb-1">
             <p className="text-[10px] font-extrabold tracking-[0.14em] text-[#F5A623]/85 uppercase">
@@ -256,7 +253,6 @@ function SidebarContent({
         </nav>
       </div>
 
-      {/* Sidebar Footer */}
       <div className="space-y-3 border-t border-white/10 pt-4">
         <p className="px-1 text-[10px] font-medium text-slate-400">
           Your safety. Our priority.
@@ -283,12 +279,12 @@ function SidebarContent({
 function DashboardSkeleton() {
   return (
     <div className="space-y-5 p-4">
-      <div className="h-24 animate-pulse rounded-2xl border border-[#E6ECF2] bg-white p-4" />
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-2">
+      <div className="h-24 animate-pulse rounded-2xl border border-slate-200 bg-white p-4" />
+      <div className="grid grid-cols-2 gap-3">
         {[0, 1].map((item) => (
           <div
             key={item}
-            className="h-40 animate-pulse rounded-2xl border border-[#E6ECF2] bg-white p-3"
+            className="h-40 animate-pulse rounded-2xl border border-slate-200 bg-white p-3"
           />
         ))}
       </div>
@@ -296,7 +292,7 @@ function DashboardSkeleton() {
         {[0, 1, 2, 3, 4, 5].map((item) => (
           <div
             key={item}
-            className="h-48 animate-pulse rounded-2xl border border-[#E6ECF2] bg-white p-3"
+            className="h-48 animate-pulse rounded-2xl border border-slate-200 bg-white p-3"
           />
         ))}
       </div>
@@ -363,14 +359,12 @@ async function TravellerDashboardContent() {
           aria-hidden="true"
         />
 
-        {/* Backdrop */}
         <label
           htmlFor="mobile-sidebar-toggle"
           aria-label="Close sidebar"
           className="pointer-events-none fixed inset-0 z-40 bg-[#06132A]/60 opacity-0 backdrop-blur-2xs transition-opacity duration-200 peer-checked:pointer-events-auto peer-checked:opacity-100"
         />
 
-        {/* Slide-over Sidebar Panel */}
         <aside
           aria-label="Mobile navigation sidebar"
           className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] -translate-x-full border-r border-[#F5A623]/30 shadow-2xl transition-transform duration-200 ease-out peer-checked:translate-x-0"
@@ -388,7 +382,7 @@ async function TravellerDashboardContent() {
         </aside>
 
         {/* MOBILE TOP HEADER */}
-        <header className="sticky top-0 z-30 border-b border-[#E6ECF2] bg-white/95 px-3.5 py-2.5 backdrop-blur-md">
+        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-3.5 py-2.5 backdrop-blur-md">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <label
@@ -412,7 +406,7 @@ async function TravellerDashboardContent() {
             <form action={signOut}>
               <button
                 type="submit"
-                className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-lg border border-[#E6ECF2] bg-[#F4F7FB] px-2.5 py-1 text-[11px] font-bold text-[#0A1F44] transition hover:border-[#0A1F44]/30 hover:bg-[#0A1F44] hover:text-[#F5A623]"
+                className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-[#F4F7FB] px-2.5 py-1 text-[11px] font-bold text-[#0A1F44] transition hover:border-[#0A1F44]/30 hover:bg-[#0A1F44] hover:text-[#F5A623]"
               >
                 <span>🚪</span>
                 <span>Sign out</span>
@@ -465,14 +459,14 @@ async function TravellerDashboardContent() {
             </div>
           </section>
 
-          {/* PRIORITY OPERATIONS (2 Columns on Mobile) */}
+          {/* PRIORITY OPERATIONS */}
           <section aria-label="Priority services" className="mb-6 sm:mb-7">
             <div className="mb-2.5 flex items-center justify-between gap-2 sm:mb-3.5">
               <div>
                 <h2 className="text-xs font-black tracking-tight text-[#0A1F44] sm:text-base">
                   Priority Operations ⚡
                 </h2>
-                <p className="hidden text-xs text-[#718096] sm:block">
+                <p className="hidden text-xs text-slate-500 sm:block">
                   Fast access to trip safety and emergency response
                 </p>
               </div>
@@ -486,7 +480,7 @@ async function TravellerDashboardContent() {
                 <Link
                   key={service.number}
                   href={service.href!}
-                  className="group flex flex-col overflow-hidden rounded-xl border border-[#E6ECF2] bg-white shadow-2xs transition-all hover:-translate-y-0.5 hover:border-[#187B83]/50 hover:shadow-md sm:flex-row sm:rounded-2xl"
+                  className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs transition-all hover:-translate-y-0.5 hover:border-[#187B83] hover:shadow-md sm:flex-row sm:rounded-2xl"
                 >
                   <div className="relative aspect-[16/10] w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-auto sm:w-44">
                     <img
@@ -521,13 +515,13 @@ async function TravellerDashboardContent() {
                         </h3>
                       </div>
 
-                      <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-[#718096] sm:mt-1.5 sm:line-clamp-none sm:text-xs sm:leading-relaxed">
+                      <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-slate-600 sm:mt-1.5 sm:line-clamp-none sm:text-xs sm:leading-relaxed">
                         {service.description}
                       </p>
                     </div>
 
-                    <div className="mt-2.5 flex items-center justify-between border-t border-[#E6ECF2] pt-2 sm:mt-3.5 sm:pt-2.5">
-                      <span className="truncate text-[10px] font-extrabold text-[#102D50] group-hover:text-[#187B83] sm:text-xs">
+                    <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 pt-2 sm:mt-3.5 sm:pt-2.5">
+                      <span className="text-[11px] font-extrabold text-[#102D50] group-hover:text-[#187B83] sm:text-xs">
                         Open
                       </span>
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#F5A623] text-[11px] font-black text-[#0A1F44] transition-transform group-hover:translate-x-0.5 sm:h-7 sm:w-7 sm:rounded-lg sm:text-xs">
@@ -540,18 +534,18 @@ async function TravellerDashboardContent() {
             </div>
           </section>
 
-          {/* ALL OTHER TRAVEL SERVICES (2 Columns on Mobile) */}
+          {/* ALL OTHER TRAVEL SERVICES */}
           <section id="services" className="mb-6 sm:mb-8">
             <div className="mb-2.5 flex items-center justify-between gap-2 sm:mb-4">
               <div>
                 <h2 className="text-sm font-black tracking-tight text-[#0A1F44] sm:text-lg">
                   All Travel Services 🧳
                 </h2>
-                <p className="hidden text-xs text-[#718096] sm:block">
+                <p className="hidden text-xs text-slate-500 sm:block">
                   Full suite of wallet, payments, protection, and tracking tools
                 </p>
               </div>
-              <span className="rounded-full border border-[#E6ECF2] bg-white px-2.5 py-0.5 text-[9px] font-extrabold tracking-wider text-[#102D50] uppercase shadow-2xs sm:px-3 sm:py-1 sm:text-[10px]">
+              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[9px] font-extrabold tracking-wider text-[#102D50] uppercase shadow-2xs sm:px-3 sm:py-1 sm:text-[10px]">
                 09 Modules
               </span>
             </div>
@@ -564,11 +558,11 @@ async function TravellerDashboardContent() {
                   <article
                     className={`group flex h-full flex-col overflow-hidden rounded-xl border bg-white p-2.5 transition-all sm:rounded-2xl sm:p-3.5 ${
                       isAvailable
-                        ? "border-[#E6ECF2] shadow-2xs hover:-translate-y-0.5 hover:border-[#187B83]/50 hover:shadow-md"
-                        : "border-[#E6ECF2]/80 opacity-80"
+                        ? "border-slate-200 shadow-xs hover:-translate-y-0.5 hover:border-[#187B83] hover:shadow-md"
+                        : "border-slate-200/90 opacity-90"
                     }`}
                   >
-                    <div className="relative aspect-[16/10] w-full overflow-hidden rounded-lg border border-[#E6ECF2] bg-slate-100 sm:rounded-xl">
+                    <div className="relative aspect-[16/10] w-full overflow-hidden rounded-lg border border-slate-100 bg-slate-100 sm:rounded-xl">
                       <img
                         src={imageUrl(service.image)}
                         alt={service.title}
@@ -579,7 +573,7 @@ async function TravellerDashboardContent() {
                     <div className="flex flex-1 flex-col justify-between pt-2.5 sm:pt-3.5">
                       <div>
                         <div className="mb-1 flex items-center justify-between gap-1.5 sm:mb-1.5">
-                          <span className="truncate text-[9px] font-extrabold tracking-wider text-[#718096] uppercase sm:text-[10px]">
+                          <span className="truncate text-[9px] font-extrabold tracking-wider text-slate-500 uppercase sm:text-[10px]">
                             {service.number} • {service.category}
                           </span>
                           <span
@@ -604,16 +598,16 @@ async function TravellerDashboardContent() {
                           </h3>
                         </div>
 
-                        <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-[#718096] sm:mt-1.5 sm:line-clamp-none sm:text-xs sm:leading-relaxed">
+                        <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-slate-600 sm:mt-1.5 sm:line-clamp-none sm:text-xs sm:leading-relaxed">
                           {service.description}
                         </p>
                       </div>
 
-                      <div className="mt-2.5 flex items-center justify-between border-t border-[#E6ECF2] pt-2 sm:mt-3.5 sm:pt-2.5">
+                      <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 pt-2 sm:mt-3.5 sm:pt-2.5">
                         {isAvailable ? (
                           <>
-                            <span className="text-[10px] font-bold text-[#102D50] group-hover:text-[#187B83] sm:text-xs">
-                              Launch
+                            <span className="text-[11px] font-extrabold text-[#102D50] group-hover:text-[#187B83] sm:text-xs">
+                              Open
                             </span>
                             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#F0F5F9] text-[11px] font-black text-[#102D50] transition-colors group-hover:bg-[#F5A623] sm:h-7 sm:w-7 sm:text-xs">
                               →
@@ -645,7 +639,7 @@ async function TravellerDashboardContent() {
           </section>
 
           {/* Footer */}
-          <footer className="flex flex-col items-center justify-between gap-2 rounded-xl border border-[#E6ECF2] bg-white px-4 py-3 text-center text-[11px] text-[#718096] shadow-2xs sm:flex-row sm:rounded-2xl sm:py-3.5 sm:text-left sm:text-xs">
+          <footer className="flex flex-col items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-center text-[11px] text-slate-500 shadow-2xs sm:flex-row sm:rounded-2xl sm:py-3.5 sm:text-left sm:text-xs">
             <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
               <span className="h-2 w-2 rounded-full bg-[#E98012]" />
               <strong className="font-black text-[#102D50]">
@@ -654,7 +648,7 @@ async function TravellerDashboardContent() {
               <span className="hidden text-slate-300 sm:inline">|</span>
               <span>Your safety. Our priority.</span>
             </div>
-            <p className="text-[10px] text-[#718096] sm:text-[11px]">
+            <p className="text-[10px] text-slate-500 sm:text-[11px]">
               © {new Date().getFullYear()} TSC. All rights reserved.
             </p>
           </footer>
